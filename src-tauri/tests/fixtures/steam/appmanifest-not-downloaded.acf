@@ -1,0 +1,13 @@
+"AppState"
+{
+	"appid"		"999999"
+	"universe"		"1"
+	"name"		"Queued Indie Game"
+	"StateFlags"		"1026"
+	"installdir"		"Queued Indie Game"
+	"SizeOnDisk"		"0"
+	"StagingSize"		"0"
+	"BytesToDownload"		"123456789"
+	"BytesDownloaded"		"0"
+	"UpdateResult"		"0"
+}
