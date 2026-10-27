@@ -1,0 +1,15 @@
+# dependencies / build output
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# local toolchain installed for this machine (not part of the repo)
+.tools/
+
+# logs / editor / os
+*.log
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

@@ -1,0 +1,29 @@
+[package]
+name = "kudos"
+version = "0.1.0"
+description = "Project Kudos - a lightweight PS5-style Windows game launcher"
+authors = ["Project Kudos"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix keeps the library name unique and avoids conflicting with the bin name.
+name = "kudos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+winreg = "0.56.0"
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

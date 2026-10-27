@@ -1,0 +1,35 @@
+{
+  "name": "project-kudos",
+  "version": "0.1.0",
+  "description": "Project Kudos - a lightweight PS5-style Windows game launcher",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "node scripts/tauri.mjs",
+    "rust": "node scripts/rust.mjs",
+    "rust:check": "node scripts/rust.mjs check",
+    "rust:test": "node scripts/rust.mjs test",
+    "setup:windows-sdk": "node scripts/setup-windows-sdk.mjs",
+    "tauri:dev": "node scripts/tauri.mjs dev",
+    "tauri:build": "node scripts/tauri.mjs build"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-opener": "^2.5.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tauri-apps/cli": "^2.9.1",
+    "@types/node": "^26.6.5",
+    "svelte": "^5.56.3",
+    "svelte-check": "^4.6.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}
