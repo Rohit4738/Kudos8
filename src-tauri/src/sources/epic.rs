@@ -55,10 +55,19 @@ impl EpicSource {
     }
 
     fn manifest_dir() -> PathBuf {
-        std::env::var_os("KUDOS_EPIC_MANIFEST_DIR")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_MANIFEST_DIR))
+        if let Some(value) = std::env::var_os("KUDOS_EPIC_MANIFEST_DIR").filter(|v| !v.is_empty()) {
+            return PathBuf::from(value);
+        }
+
+        if let Some(program_data) = std::env::var_os("ProgramData").filter(|v| !v.is_empty()) {
+            return PathBuf::from(program_data)
+                .join("Epic")
+                .join("EpicGamesLauncher")
+                .join("Data")
+                .join("Manifests");
+        }
+
+        PathBuf::from(DEFAULT_MANIFEST_DIR)
     }
 }
 
