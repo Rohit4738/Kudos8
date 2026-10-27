@@ -1671,6 +1671,20 @@ mod tests {
         let second = scan_libraries(&dir.path, &mut cache);
         assert_eq!(second.len(), 2);
         assert_eq!(cache.manifests.len(), 3);
+
+        // A changed manifest (different length and mtime) must be reparsed.
+        let changed_path = steamapps.join("appmanifest_999999.acf");
+        let mut changed = fs::read_to_string(&changed_path).unwrap();
+        changed = changed.replace("Queued Indie Game", "Queued Indie Game Renamed");
+        changed.push_str("\n// cache-busting padding\n");
+        fs::write(&changed_path, changed).unwrap();
+
+        let third = scan_libraries(&dir.path, &mut cache);
+        let renamed = third
+            .iter()
+            .find(|game| game.id == "steam:999999")
+            .expect("renamed game");
+        assert_eq!(renamed.title, "Queued Indie Game Renamed");
     }
 
     #[test]
