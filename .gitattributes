@@ -1,0 +1,26 @@
+# Normalize line endings in the repository. Source files are stored with LF;
+# Windows scripts stay CRLF so they run in cmd.exe/PowerShell without surprises.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never diff, merge, or convert line endings.
+*.exe binary
+*.dll binary
+*.pdb binary
+*.ico binary
+*.icns binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.woff2 binary
+*.bin binary
+*.vdf binary
+
+# Test fixtures are parsed byte-for-byte (binary VDF, ACF text, Steam binaries).
+# Do not let autocrlf rewrite them, even for extensions that are normally text.
+src-tauri/tests/fixtures/** -text
