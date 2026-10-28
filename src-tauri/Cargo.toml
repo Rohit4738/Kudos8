@@ -1,8 +1,8 @@
 [package]
 name = "kudos"
 version = "0.1.0"
-description = "Project Kudos - a lightweight PS5-style Windows game launcher"
-authors = ["Project Kudos"]
+description = "Kudos - a lightweight PS5-style Windows game launcher"
+authors = ["Kudos"]
 edition = "2021"
 
 [lib]

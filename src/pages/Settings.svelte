@@ -266,7 +266,7 @@
     <section class="card about-card">
       <div class="brand">K</div>
       <div class="about-copy">
-        <h2>Project Kudos</h2>
+        <h2>Kudos</h2>
         <p>
           A lightweight, controller-first launcher for Steam, Epic and GOG.
           Version 0.1.0.

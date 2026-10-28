@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Project Kudos",
+  "productName": "Kudos",
   "version": "0.1.0",
   "identifier": "com.kudos.launcher",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Project Kudos",
+        "title": "Kudos",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -41,6 +41,11 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "publisher": "Kudos",
+    "copyright": "Copyright © 2026 Kudos",
+    "category": "Game",
+    "shortDescription": "A lightweight PS5-style game launcher for Windows.",
+    "longDescription": "Kudos brings Steam, Epic and GOG libraries into one controller-first library. It is a small native shell around the system WebView2 runtime and writes standard Steam shortcuts on request.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -50,7 +55,12 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "startMenuFolder": "Kudos",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "compression": "lzma"
       }
     }
   }

@@ -1,4 +1,4 @@
-//! Project Kudos backend entry point.
+//! Kudos backend entry point.
 //!
 //! Contract summary (full details in TARGET.md):
 //! - `Game` is the only shape the frontend ever sees.
@@ -26,5 +26,5 @@ pub fn run() {
             commands::get_steam_status,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Project Kudos");
+        .expect("error while running Kudos");
 }

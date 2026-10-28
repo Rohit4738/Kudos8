@@ -31,7 +31,7 @@
   <nav class="rail" aria-label="Primary">
     <button
       class="brand"
-      title="Project Kudos"
+      title="Kudos"
       onclick={() => navigate({ name: "home" })}
     >
       K
