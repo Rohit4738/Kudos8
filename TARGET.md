@@ -2,7 +2,7 @@
 
 > **Read this file before writing any code. Update your Status row before you finish.**
 > Owner of this file: **Session A (architect)**. Sections may be appended to; contracts may not be
-> changed silently. **Final integration state, known issues and the manual checklist are in §10–§12.**
+> changed silently. **Final integration state, known issues and the manual checklist are in §10–§13.**
 
 ---
 
@@ -116,6 +116,7 @@ Sources are registered once in `src-tauri/src/state.rs` (`AppState::new`). Front
 | `launch_game` | `(game_id: String) -> SourceResult<()>` | `null` or error string | Resolves the owning source by id, then launches. |
 | `add_to_steam` | `(game_id: String) -> SourceResult<()>` | `null` or error string | Creates a non-Steam shortcut via Steam. |
 | `get_steam_status` | `() -> SteamStatus` | `{ installed, running, steamPath? }` | Steam client detection. |
+| `get_achievements` | `(game_id: String) -> AchievementSummary` | `{ supported, unlocked, total, reason? }` | **Additive (Session F, §3.5).** Local Steam achievement counts only. Never rejects, never touches the network, never blocks `list_games`. |
 
 From JS always go through `src/lib/api.ts`:
 
@@ -133,6 +134,31 @@ Tauri v2 camelCases arguments: Rust `game_id` ↔ JS `{ gameId }`. Do not rename
 pub fn add_to_steam_shortcut(game: &Game) -> SourceResult<()>;
 pub fn steam_status() -> SteamStatus;
 ```
+
+### 3.5 `AchievementSummary` — additive contract (Session F)
+
+Rust: `src-tauri/src/models.rs` · TypeScript: `src/lib/types.ts` (must stay in sync)
+
+```rust
+pub struct AchievementSummary {
+    pub supported: bool,   // false = no local data / no achievements / unreadable
+    pub unlocked: u32,
+    pub total: u32,
+    pub reason: Option<String>, // omitted on the wire when None
+}
+```
+
+Wire format (camelCase, `None` omitted):
+
+```json
+{ "supported": true, "unlocked": 12, "total": 40 }
+```
+
+`get_achievements(game_id)` reads only Steam's local `appcache/stats` files
+(`UserGameStats_<accountid>_<appid>.bin` for unlocked flags and
+`UserGameStatsSchema_<appid>.bin` for achievement totals). There is no Steam Web API,
+API key, or network request. The command returns `supported:false` (never an error)
+for Epic/GOG ids, missing Steam profiles, missing files, or any parse doubt.
 
 ---
 
@@ -236,6 +262,20 @@ Update **your** row(s) after every milestone; add technical findings/blockers to
 | E4 | Real-machine registry integration test | E | DONE | `src-tauri/tests/registry.rs`: all 3 platforms registered once; ids namespaced/unique/resolvable through `find_game`; every local cover absolute, existing and (for Steam) inside `librarycache`. Evidence: `3 local, 0 remote, 3 games total`; 38 total Rust tests pass. |
 | E5 | Final gates + documentation | E | DONE | `npm run check` 0 errors/0 warnings; `npm run rust:check` clean; `npm run rust:test` 38 pass; `npm run build` 101.77 KB JS (35.08 KB gzip); `npm run tauri build` green. README rewritten; §10–§12 record final status, known issues and the manual checklist. |
 | E6 | Add-to-Steam live verification | E | **BLOCKED** | Steam was running (PID 7696) during the final pass. Per the rule “do not kill Steam / do not write live shortcuts while it runs”, the app was only verified to refuse (test `refuses_to_add_while_steam_is_running`) and the writer verified against fixtures (round-trip, backup, idempotency). Manual check required — see §12. |
+| F1 | Controller detection, live connect/disconnect, persisted layout override | F | DONE | New `src/lib/controller.svelte.ts`. Classifies `Gamepad.id` once per event (Xbox/XInput/Microsoft/045e, DualSense/DualShock/Sony/PS3-5/054c, Nintendo/Switch/Joy-Con/057e, else generic). Listens to `gamepadconnected` / `gamepaddisconnected` plus focus/visibility refresh — no polling and **no per-frame classification**; `gamepad.ts` keeps its single existing input rAF loop. No pad ⇒ keyboard hints. Override persisted at **`kudos.padLayout`**. Settings shows the raw pad name, detected layout and Auto/Xbox/PlayStation/Nintendo/Keyboard. Evidence: `?mock=1&pad=…` renders keyboard plus all pad families; Keyboard override survived reload; 13 smoke screenshots, 0 console errors. |
+| F2 | Controller-aware button glyphs everywhere | F | DONE | New `PadGlyph.svelte` / `ControlHint.svelte`: full face set A/B/X/Y (Xbox coloured; Nintendo letters), PlayStation **✕/○/□/△ as four hand-written inline SVG paths** (no font dependency), generic shapes, keyboard keycaps. Nintendo physical mapping in `gamepad.ts`: confirm = button 1, back = button 0, secondary = button 3. Settings shows the full four-glyph face set for the active layout. Evidence: PlayStation footer = 4 SVGs / 0 `<kbd>`; keyboard footer = 0 SVGs / 4 `<kbd>`; 0 console errors. |
+| F3 | Personalization: accents, background, density, sorting, hidden games | F | DONE | Extends `theme.ts`: 12 accent presets, background `ambient\|solid\|gradient`, tile density `compact\|default\|large` via HTML data-attributes + CSS vars, info-panel crossfade toggle. `windowPrefs.ts` adds startup page `home\|settings`; `library.svelte.ts` adds title/platform/installed-first sorting. Gradient uses an oversized `.backdrop` with a 26 s **transform-only** drift and `animation:none` under `prefers-reduced-motion`. Evidence: compact+gradient screenshot; startup reload lands on Settings; crossfade off leaves one panel; no console errors. |
+| F4 | Hide-from-library UX + Settings unhide list | F | DONE | Right-click or 650 ms press on a Home tile hides it; detail page has Hide/Unhide; ids persist in **`kudos.hiddenGames`**; Settings lists hidden games with Unhide / Unhide all; Home header shows “n hidden”. No library contract change — hidden games stay in `library.games`. Evidence: hide took the rail from 10 → 9 tiles and showed “1 hidden”; Unhide all cleared the key. |
+| F5 | `get_achievements` command + local Steam parser | F | DONE | **Additive contract change**, documented in §3.5. New `src-tauri/src/achievements.rs` parses `UserGameStats_<account>_<appid>.bin` (case-sensitive magic `cache`) + `UserGameStatsSchema_<appid>.bin` for totals; unlocked = `max(bitfield popcount, AchievementTimes keys)` per achievement group, clipped to total. Reuses B's `detect_steam_root` / `active_userdata_dir` (made `pub(crate)`). Cache per `(root, account, appid)` with both files' `(mtime,len)`; never called by `list_games`. Real machine: **`steam:730` 1/1 supported; `steam:12150` supported:false, “Steam has no local achievement data for this game.”; `steam:413150` 0/49 supported.** |
+| F6 | Achievements UI on GameDetail | F | DONE | Steam: “Achievements — n / total unlocked” + subtle progress bar (mock: **18/45, 40%**); Epic/GOG: “Achievements not available for this platform”; Steam `supported:false`: renders nothing (no toast, no error card). Local read runs after paint and never blocks the library. Evidence: `f-detail-steam` (Cyberpunk 2077), `f-detail-epic`, `f-detail-gog`; 0 console errors. |
+| F7 | Achievement parser tests + committed fixtures | F | DONE | 9 achievement tests + 5 committed binaries under `src-tauri/tests/fixtures/achievements/` (`schema-424242`, `stats-424242`, `stats-empty`, `stats-corrupt`, `stats-wrong-magic`). Covers totals, bitfield/**AchievementTimes** unlocked counts, absent file, wrong magic/case, trailing END markers, schema appid mismatch and cache invalidation. Full suite: **52 unit + 3 registry integration, 0 failed**; real-machine smoke output recorded in §13. |
+| F8 | Final gates, visual smoke, documentation, push | F | DONE | `npm run check` 0/0; `npm run rust:check` clean; `npm run rust:test` 52+3 pass; `npm run build` **124.75 KB JS / 42.19 KB gzip** (CSS 39.52 / 8.12 KB); `npm run tauri build` green (exe + `Kudos_0.1.0_x64-setup.exe`, 1.40 MiB). Headless Chrome 1600×1000 with `?mock=1` + `?pad=` preview modes: 13 screenshots in `%TEMP%\opencode\kudos-shots`, 0 console errors. Committed with `Session F:` subjects and pushed to `origin main`. |
+
+> **Session F file-ownership note (approved by the user's task):** F edits `src-tauri/src/sources/steam.rs`
+> only to expose two existing helpers (`detect_steam_root`, `active_userdata_dir`) as `pub(crate)`, and
+> edits Session D's UI files (`Home`, `GameDetail`, `Settings`, `gamepad.ts`, `theme.ts`, `windowPrefs.ts`,
+> `library.svelte.ts`, `App.svelte`) for the three requested features. No frozen shape changes; the only
+> contract addition is `get_achievements` in §3.5.
 
 ---
 
@@ -389,3 +429,48 @@ Run on a Windows 10/11 x64 machine with Steam installed. Tick each item and note
 - [ ] Steam status shows installed/running/path and Refresh updates it.
 - [ ] Idle private RAM: native ~6 MB; WebView2 within the documented ~175–250 MB floor.
 - [ ] No console errors in the browser preview and no repeated background work/polling.
+
+---
+
+## 13. SESSION F — CONTROLLER, PERSONALIZATION, ACHIEVEMENTS
+
+Final pass: **2026-10-28**. All work is additive; `get_achievements` is the only contract
+addition (§3.5). No new npm or Cargo dependencies.
+
+**Gates (all green):**
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | 0 errors, 0 warnings |
+| `npm run rust:check` | clean |
+| `npm run rust:test` | **52 passed, 0 failed** (9 achievement tests) + 3 registry integration |
+| `npm run build` | **124.75 KB JS / 42.19 KB gzip**; 39.52 KB CSS / 8.12 KB gzip |
+| `npm run tauri build` | `kudos.exe` + `Kudos_0.1.0_x64-setup.exe` (1.40 MiB) |
+| Real achievement smoke | `steam:730` 1/1; `steam:12150` unsupported; `steam:413150` 0/49 |
+
+**Visual smoke:** headless Chrome at 1600×1000 against `?mock=1`, with
+`?mock=1&pad=xbox|playstation|nintendo|generic|keyboard` for each glyph family. Thirteen PNGs in
+`%TEMP%\opencode\kudos-shots` (`f-home-*`, `f-detail-*`, `f-settings-*`, `f-startup-settings`),
+**0 console errors**. Verified in the DOM/screenshots:
+
+- No pad ⇒ keyboard keycaps; PlayStation footer uses inline SVG glyphs, not a font; Keyboard
+  override persists across reload.
+- Hide drops the rail from 10 to 9 tiles and shows “1 hidden”; Unhide all clears `kudos.hiddenGames`.
+- Gradient mode runs a 26 s transform-only drift, and `prefers-reduced-motion: reduce` computes
+  `animation: none`; compact density and the startup page (Settings) both apply.
+- Crossfade off leaves one info panel; Steam mock detail shows **18/45 (40%)**; Epic/GOG show
+  “Achievements not available for this platform”.
+- Achievement reads are local-only. `steam:730` parses **1/1** (this account's local CS2 stats),
+  `steam:413150` **0/49**, and `steam:12150` returns `supported:false` with “Steam has no local
+  achievement data for this game.”
+
+**Not verified on this machine:**
+
+- No physical Xbox/PlayStation/Nintendo pad was available. Detection patterns and live
+  connect/disconnect events are wired, but only the `?pad=` previews were exercised visually.
+- Epic/GOG achievements are UI-only by design; neither client is installed, so no real non-Steam
+  achievement provider was tested. The command returns `supported:false` for non-Steam ids.
+- Achievement counts reflect Steam's local cache and are re-read on detail-page visits (cache keyed
+  by both files' `mtime` + length), not pushed while Steam writes. A title with no local stats or
+  schema legitimately shows `supported:false`.
+- Steam stayed running for the whole pass, so the E6 live Add-to-Steam write remains blocked (§11).
