@@ -8,7 +8,7 @@ use std::path::Path;
 use tauri::{Manager, State};
 
 use crate::error::{SourceError, SourceResult};
-use crate::models::{Game, SteamStatus};
+use crate::models::{AchievementSummary, Game, SteamStatus};
 use crate::state::AppState;
 
 /// Every game from every store, already merged and sorted.
@@ -56,7 +56,13 @@ pub fn launch_game(state: State<'_, AppState>, game_id: String) -> SourceResult<
         .source_for(game.platform)
         .ok_or_else(|| SourceError::unavailable(format!("no source for {}", game.platform)))?;
 
-    source.launch(&game)
+    let result = source.launch(&game);
+    // Session G: journal every successful launch for the Recently Played row.
+    // Best-effort: record_launch never rejects and never affects the launch result.
+    if result.is_ok() {
+        crate::steam_recent::record_launch(&game.id);
+    }
+    result
 }
 
 /// Add a game to the Steam library as a non-Steam shortcut.
@@ -73,4 +79,22 @@ pub fn add_to_steam(state: State<'_, AppState>, game_id: String) -> SourceResult
 #[tauri::command]
 pub fn get_steam_status() -> SteamStatus {
     crate::sources::steam::steam_status()
+}
+
+/// Recently played games: Steam's `LastPlayed` merged with Kudos' launch journal.
+///
+/// Additive command (Session G). Never rejects; only ids present in the current
+/// library are returned, newest first. `limit` is clamped to 1..=50.
+#[tauri::command]
+pub fn get_recent_games(state: State<'_, AppState>, limit: u32) -> Vec<crate::steam_recent::RecentGame> {
+    crate::steam_recent::recent_games(&state, limit)
+}
+
+/// Local-only achievement count for one Steam game.
+///
+/// Never errors: unsupported platforms, missing files and unreadable caches all
+/// come back as `supported: false`, so the detail page can render quietly.
+#[tauri::command]
+pub fn get_achievements(game_id: String) -> AchievementSummary {
+    crate::achievements::summary_for(&game_id)
 }

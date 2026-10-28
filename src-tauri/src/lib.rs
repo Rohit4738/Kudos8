@@ -5,12 +5,14 @@
 //! - Every platform is a `sources::LibrarySource` behind a single registry.
 //! - Frontend commands: `list_games`, `launch_game`, `add_to_steam`, `get_steam_status`.
 
+pub mod achievements;
 pub mod commands;
 pub mod error;
 pub mod launch;
 pub mod models;
 pub mod sources;
 pub mod state;
+pub mod steam_recent;
 
 use state::AppState;
 
@@ -24,6 +26,8 @@ pub fn run() {
             commands::launch_game,
             commands::add_to_steam,
             commands::get_steam_status,
+            commands::get_recent_games,
+            commands::get_achievements,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kudos");

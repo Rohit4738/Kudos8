@@ -398,7 +398,7 @@ fn path_key(path: &Path) -> String {
     path.to_string_lossy().to_ascii_lowercase()
 }
 
-fn read_text_file(path: &Path) -> std::io::Result<String> {
+pub(crate) fn read_text_file(path: &Path) -> std::io::Result<String> {
     let bytes = fs::read(path)?;
     let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
     Ok(String::from_utf8_lossy(bytes).into_owned())
@@ -408,7 +408,7 @@ fn read_text_file(path: &Path) -> std::io::Result<String> {
 // Steam installation / process detection
 // ---------------------------------------------------------------------------
 
-fn detect_steam_root() -> Option<PathBuf> {
+pub(crate) fn detect_steam_root() -> Option<PathBuf> {
     for (hive, key, value) in [
         (&HKCU, r"Software\Valve\Steam", "SteamPath"),
         (
@@ -481,20 +481,20 @@ fn command_output(command: &mut Command) -> std::io::Result<std::process::Output
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
-enum Vdf {
+pub(crate) enum Vdf {
     Str(String),
     Table(Vec<(String, Vdf)>),
 }
 
 impl Vdf {
-    fn as_str(&self) -> Option<&str> {
+    pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
             Vdf::Str(value) => Some(value),
             Vdf::Table(_) => None,
         }
     }
 
-    fn as_table(&self) -> Option<&[(String, Vdf)]> {
+    pub(crate) fn as_table(&self) -> Option<&[(String, Vdf)]> {
         match self {
             Vdf::Table(entries) => Some(entries),
             Vdf::Str(_) => None,
@@ -513,7 +513,7 @@ fn table_get_str<'a>(table: &'a [(String, Vdf)], key: &str) -> Option<&'a str> {
     table_get(table, key).and_then(Vdf::as_str)
 }
 
-fn parse_vdf(text: &str) -> Result<Vdf, String> {
+pub(crate) fn parse_vdf(text: &str) -> Result<Vdf, String> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut parser = VdfParser {
         bytes: text.as_bytes(),
@@ -736,7 +736,7 @@ pub fn steam_status() -> SteamStatus {
 // Active Steam user
 // ---------------------------------------------------------------------------
 
-fn active_userdata_dir(root: &Path) -> Option<PathBuf> {
+pub(crate) fn active_userdata_dir(root: &Path) -> Option<PathBuf> {
     let userdata = root.join("userdata");
 
     if let Some((account_id, _)) = most_recent_login(root) {

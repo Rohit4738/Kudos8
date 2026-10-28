@@ -1,0 +1,47 @@
+"UserLocalConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"Apps"
+				{
+					"730"
+					{
+						"LastPlayed"		"1792855921"
+						"Playtime"		"555"
+						"PlaytimeDisconnected"		"2"
+					}
+					"413150"
+					{
+						"LastPlayed"		"1782486344"
+						"Playtime"		"842"
+						"BadgeData"		"020000000804"
+					}
+					"999"
+					{
+						"Playtime"		"12"
+					}
+					"480"
+					{
+						"LastPlayed"		"not-a-number"
+					}
+					"abc"
+					{
+						"LastPlayed"		"1700000000"
+					}
+					"0"
+					{
+						"LastPlayed"		"1700000000"
+					}
+					"3564740"
+					{
+						"LastPlayed"		"0"
+					}
+				}
+			}
+		}
+	}
+}
