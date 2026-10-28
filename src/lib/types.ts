@@ -22,6 +22,14 @@ export interface SteamStatus {
   steamPath?: string;
 }
 
+/** Local Steam achievement summary; additive to the original contract. */
+export interface AchievementSummary {
+  supported: boolean;
+  unlocked: number;
+  total: number;
+  reason?: string;
+}
+
 export const PLATFORM_LABEL: Record<Platform, string> = {
   steam: "Steam",
   epic: "Epic Games",

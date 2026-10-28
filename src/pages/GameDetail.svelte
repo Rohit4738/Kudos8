@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { addToSteam, launchGame } from "../lib/api";
+  import { addToSteam, getAchievements, launchGame } from "../lib/api";
   import { coverSource, placeholderBackground } from "../lib/art";
   import {
     formatBytes,
@@ -15,10 +15,19 @@
     playState,
   } from "../lib/format";
   import { onGamepad } from "../lib/gamepad";
-  import { findGame, library, loadLibrary } from "../lib/library.svelte";
+  import {
+    findGame,
+    hideGame,
+    isHidden,
+    library,
+    loadLibrary,
+    unhideGame,
+  } from "../lib/library.svelte";
   import { back } from "../lib/router.svelte";
   import { applyStoredAccent } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
+  import type { AchievementSummary } from "../lib/types";
+  import ControlHint from "../lib/components/ControlHint.svelte";
   import GameArt from "../lib/components/GameArt.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import LaunchOverlay from "../lib/components/LaunchOverlay.svelte";
@@ -35,9 +44,64 @@
   let steamError = $state<string | null>(null);
 
   const game = $derived(findGame(id));
+  const hidden = $derived(game ? isHidden(game.id) : false);
   const heroImage = $derived(game ? coverSource(game.coverImage) : null);
   const loading = $derived(library.status === "loading" && !game);
   const libraryError = $derived(library.status === "error" ? library.error : null);
+
+  // Preview counts keep the visual smoke test meaningful without a backend.
+  const MOCK_ACHIEVEMENTS: Record<string, AchievementSummary> = {
+    "steam:1091500": { supported: true, unlocked: 18, total: 45 },
+    "steam:1245620": { supported: true, unlocked: 11, total: 42 },
+    "steam:1145360": { supported: true, unlocked: 43, total: 49 },
+    "steam:757310": { supported: true, unlocked: 0, total: 26 },
+  };
+
+  let achievements = $state<AchievementSummary | null>(null);
+  let achievementRequest = 0;
+
+  // Local-only, after the page is painted. A missing or unreadable cache never
+  // blocks the tile grid and never shows an error.
+  $effect(() => {
+    const current = game;
+    achievementRequest += 1;
+    const token = achievementRequest;
+    achievements = null;
+
+    if (!current || current.platform !== "steam") return;
+    if (library.usingMock) {
+      achievements = MOCK_ACHIEVEMENTS[current.id] ?? {
+        supported: false,
+        unlocked: 0,
+        total: 0,
+      };
+      return;
+    }
+
+    void getAchievements(current.id)
+      .then((summary) => {
+        if (token === achievementRequest) achievements = summary;
+      })
+      .catch(() => {
+        /* unsupported/read failures already come back as supported:false */
+      });
+  });
+
+  function toggleHidden(): void {
+    if (!game) return;
+    if (hidden) {
+      unhideGame(game.id);
+      pushToast("success", "Back in your library", `“${game.title}” is visible again.`);
+      return;
+    }
+    hideGame(game.id);
+    pushToast(
+      "info",
+      "Hidden from library",
+      `“${game.title}” is hidden. Unhide it from Settings at any time.`,
+    );
+    back();
+  }
 
   onMount(() => {
     applyStoredAccent();
@@ -167,7 +231,7 @@
   <button type="button" class="back" onclick={back}>
     <Icon name="arrow-left" size={16} />
     <span>Library</span>
-    <kbd>Esc</kbd>
+    <ControlHint action="back" keys="Esc" />
   </button>
 
   {#if loading}
@@ -249,6 +313,11 @@
                 {/if}
               </button>
             {/if}
+
+            <button type="button" class="hide-action" onclick={toggleHidden}>
+              <Icon name={hidden ? "eye" : "hide"} size={16} />
+              <span>{hidden ? "Unhide" : "Hide"}</span>
+            </button>
           </div>
 
           {#if game.platform === "gog"}
@@ -264,9 +333,11 @@
           {/if}
 
           <p class="key-hint">
-            <kbd>Enter</kbd> Play
-            {#if game.platform === "gog"}<span class="sep">·</span><kbd>X</kbd> Add to Steam{/if}
-            <span class="sep">·</span><kbd>B</kbd> Back
+            <ControlHint action="confirm" keys="Enter" label="Play" />
+            {#if game.platform === "gog"}
+              <ControlHint action="secondary" keys="X" label="Add to Steam" />
+            {/if}
+            <ControlHint action="back" keys="Esc" label="Back" />
           </p>
         </div>
       </div>
@@ -292,6 +363,34 @@
         </dd>
       </div>
     </dl>
+
+    {#if game.platform !== "steam"}
+      <p class="ach-unavailable">Achievements not available for this platform</p>
+    {:else if achievements?.supported}
+      <section class="achievements" aria-label="Achievements">
+        <div class="ach-head">
+          <span class="ach-icon"><Icon name="trophy" size={17} /></span>
+          <h2>Achievements</h2>
+          <span class="ach-count">
+            — {achievements.unlocked} / {achievements.total} unlocked
+          </span>
+        </div>
+        <div
+          class="ach-bar"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax={achievements.total}
+          aria-valuenow={achievements.unlocked}
+          aria-label="Achievement progress"
+        >
+          <span
+            style:transform={`scaleX(${
+              achievements.total > 0 ? achievements.unlocked / achievements.total : 0
+            })`}
+          ></span>
+        </div>
+      </section>
+    {/if}
   {/if}
 </section>
 
@@ -328,17 +427,6 @@
 
   .back:hover {
     transform: translateX(-2px);
-  }
-
-  .back kbd {
-    font-family: var(--font-ui);
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    color: var(--fg-2);
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
-    padding: 2px 5px;
   }
 
   /* ---------- hero ---------- */
@@ -594,6 +682,30 @@
     cursor: default;
   }
 
+  .hide-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 15px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--fg-2);
+    background: rgba(9, 13, 22, 0.3);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+    will-change: transform;
+  }
+
+  .hide-action:hover {
+    color: var(--fg-0);
+    transform: translateY(-1px);
+  }
+
   .steam-note {
     margin: 10px 0 0;
     min-height: 17px;
@@ -610,27 +722,83 @@
   .key-hint {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 14px;
     flex-wrap: wrap;
     margin: 16px 0 0;
     font-size: 10.5px;
     color: var(--fg-2);
   }
 
-  .key-hint kbd {
-    font-family: var(--font-ui);
-    font-size: 9px;
-    font-weight: 650;
-    letter-spacing: 0.04em;
-    color: var(--fg-1);
-    background: rgba(255, 255, 255, 0.07);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    padding: 2px 5px;
+  /* ---------- achievements ---------- */
+  .achievements {
+    margin-top: clamp(16px, 2.4vh, 24px);
+    padding: 18px 20px;
+    border-radius: 14px;
+    background:
+      linear-gradient(150deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   }
 
-  .key-hint .sep {
-    opacity: 0.35;
+  .ach-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .ach-icon {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    flex: 0 0 auto;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+
+  .ach-head h2 {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .ach-count {
+    font-size: 11.5px;
+    color: var(--fg-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ach-bar {
+    margin-top: 13px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+
+  .ach-bar span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    transform-origin: left center;
+    background: linear-gradient(
+      90deg,
+      var(--accent),
+      color-mix(in srgb, var(--accent) 58%, #ffffff)
+    );
+    transition: transform 620ms var(--ease-out);
+    will-change: transform;
+  }
+
+  .ach-unavailable {
+    margin: clamp(16px, 2.4vh, 24px) 0 0;
+    font-size: 11px;
+    color: var(--fg-2);
+    opacity: 0.82;
   }
 
   /* ---------- facts ---------- */

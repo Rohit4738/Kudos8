@@ -2,7 +2,7 @@
 //! Session D: import from here, never call `invoke` directly with string literals.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Game, SteamStatus } from "./types";
+import type { AchievementSummary, Game, SteamStatus } from "./types";
 import type { RecentGame } from "./recent";
 
 /** All games from Steam + Epic + GOG, merged and sorted by title. */
@@ -23,6 +23,14 @@ export function addToSteam(gameId: string): Promise<void> {
 /** Steam client detection, for the Settings page. */
 export function getSteamStatus(): Promise<SteamStatus> {
   return invoke<SteamStatus>("get_steam_status");
+}
+
+/**
+ * Local Steam achievement count for one game. Never rejects for missing data:
+ * unsupported platforms and unreadable caches come back as `supported: false`.
+ */
+export function getAchievements(gameId: string): Promise<AchievementSummary> {
+  return invoke<AchievementSummary>("get_achievements", { gameId });
 }
 
 /**
