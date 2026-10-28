@@ -1,0 +1,114 @@
+# Kudos CI - Windows x64 build, tests and installer artifacts.
+#
+# Runs on every push to main and every pull request targeting main. The PR
+# quality gate (svelte-check, rustfmt, clippy, unit tests) is folded into this
+# workflow so a PR gets exactly one Windows build instead of two.
+#
+# rustfmt and clippy are advisory on purpose: the current tree has pre-existing
+# formatting drift and a handful of clippy lints. Promote them to hard gates
+# once those are cleaned up (see CONTRIBUTING.md).
+
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: this workflow only reads the repository and uploads artifacts.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # --- Quality gates -----------------------------------------------------
+
+      - name: Svelte + TypeScript
+        run: npm run check
+
+      - name: Cargo check
+        run: npm run rust:check
+
+      - name: Rust formatting (advisory)
+        continue-on-error: true
+        run: npm run rust -- fmt --all -- --check
+
+      - name: Clippy (warn-only)
+        run: npm run rust -- clippy --all-targets
+
+      - name: Rust unit + registry tests
+        run: npm run rust:test
+
+      # --- Build -------------------------------------------------------------
+
+      - name: Frontend production build
+        run: npm run build
+
+      - name: Tauri release build (exe + NSIS installer)
+        run: npm run tauri build
+
+      - name: Verify build artifacts
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/kudos.exe"
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis/Kudos_*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not (Test-Path $exe)) {
+            throw "Portable exe not found: $exe"
+          }
+          if (-not $installer) {
+            throw "NSIS installer not found under src-tauri/target/release/bundle/nsis/"
+          }
+          Write-Host ("Portable exe: {0:N2} MiB" -f ((Get-Item $exe).Length / 1MB))
+          Write-Host ("Installer: {0} ({1:N2} MiB)" -f $installer.Name, ($installer.Length / 1MB))
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: kudos-windows-x64
+          path: |
+            src-tauri/target/release/kudos.exe
+            src-tauri/target/release/bundle/nsis/Kudos_*-setup.exe
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14

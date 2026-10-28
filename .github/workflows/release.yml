@@ -1,0 +1,144 @@
+# Kudos release - tag v* -> GitHub Release with the installer and portable exe.
+#
+# The release is created or updated idempotently: re-running the workflow for
+# the same tag replaces the assets instead of failing. Only the repository's
+# automatic GITHUB_TOKEN is used; there are no personal tokens or secrets here.
+
+name: Release
+
+"on":
+  push:
+    tags:
+      - "v*"
+
+# Least privilege: checkout and build only need read access. The release job
+# opts into contents: write for creating/updating the release below.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag matches the app version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if ($pkg.version -ne $tauri.version) {
+            throw "Version mismatch: package.json=$($pkg.version), tauri.conf.json=$($tauri.version)"
+          }
+          $pattern = "^v" + [regex]::Escape($pkg.version) + "(-.+)?$"
+          if ($tag -notmatch $pattern) {
+            throw "Tag '$tag' does not match app version 'v$($pkg.version)'. Bump package.json and src-tauri/tauri.conf.json before tagging."
+          }
+          Write-Host "Releasing Kudos $tag"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # --- Quality gates (same as CI) ---------------------------------------
+
+      - name: Svelte + TypeScript
+        run: npm run check
+
+      - name: Cargo check
+        run: npm run rust:check
+
+      - name: Rust formatting (advisory)
+        continue-on-error: true
+        run: npm run rust -- fmt --all -- --check
+
+      - name: Clippy (warn-only)
+        run: npm run rust -- clippy --all-targets
+
+      - name: Rust unit + registry tests
+        run: npm run rust:test
+
+      # --- Build -------------------------------------------------------------
+
+      - name: Frontend production build
+        run: npm run build
+
+      - name: Tauri release build (exe + NSIS installer)
+        run: npm run tauri build
+
+      - name: Verify build artifacts
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/kudos.exe"
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis/Kudos_*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not (Test-Path $exe)) {
+            throw "Portable exe not found: $exe"
+          }
+          if (-not $installer) {
+            throw "NSIS installer not found under src-tauri/target/release/bundle/nsis/"
+          }
+          Write-Host ("Portable exe: {0:N2} MiB" -f ((Get-Item $exe).Length / 1MB))
+          Write-Host ("Installer: {0} ({1:N2} MiB)" -f $installer.Name, ($installer.Length / 1MB))
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: kudos-release
+          path: |
+            src-tauri/target/release/kudos.exe
+            src-tauri/target/release/bundle/nsis/Kudos_*-setup.exe
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+      # softprops/action-gh-release updates an existing release for this tag and
+      # overwrites assets, so re-running the workflow is safe and idempotent.
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Kudos ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            src-tauri/target/release/bundle/nsis/Kudos_*-setup.exe
+            src-tauri/target/release/kudos.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
