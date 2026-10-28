@@ -6,7 +6,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { addToSteam, launchGame } from "../lib/api";
-  import { coverSource, isTauriRuntime, placeholderBackground } from "../lib/art";
+  import { coverSource, placeholderBackground } from "../lib/art";
   import {
     formatBytes,
     humanError,
@@ -74,8 +74,8 @@
     let failure: string | null = null;
 
     try {
-      if (library.usingMock && !isTauriRuntime()) {
-        // Browser preview: show the launching state without a backend.
+      if (library.usingMock) {
+        // Preview mode: show the launching state without a backend.
         await wait(1500);
       } else {
         await launchGame(game.id);
@@ -89,7 +89,7 @@
 
     if (failure) {
       pushToast("error", "Couldn't launch", failure);
-    } else if (library.usingMock && !isTauriRuntime()) {
+    } else if (library.usingMock) {
       pushToast(
         "info",
         "Preview mode",
@@ -105,13 +105,13 @@
     steamError = null;
 
     try {
-      if (library.usingMock && !isTauriRuntime()) {
+      if (library.usingMock) {
         await wait(900);
         steamState = "success";
         pushToast(
           "success",
-          "Added to Steam",
-          "Preview data — no shortcut was written.",
+          "Preview mode",
+          "No shortcut was written. Restart Steam to see the new shortcut in your Library in the real app.",
         );
         return;
       }
@@ -120,8 +120,8 @@
       steamState = "success";
       pushToast(
         "success",
-        "Added to Steam",
-        "Restart Steam to see the shortcut in your library.",
+        "Shortcut added to Steam",
+        "Restart Steam to see the new shortcut in your Library.",
       );
     } catch (error) {
       const message = humanError(error);
@@ -256,7 +256,7 @@
               {#if steamState === "error" && steamError}
                 {steamError}
               {:else if steamState === "success"}
-                Restart Steam to see the shortcut in your library.
+                Restart Steam to see the new shortcut in your Library.
               {:else}
                 Adds a non-Steam shortcut. Steam must be closed while Kudos writes it.
               {/if}

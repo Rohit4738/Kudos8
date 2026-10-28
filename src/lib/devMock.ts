@@ -1,14 +1,11 @@
-// Dev-only fake library. Kept behind a flag so Session E can demo the whole UI
-// without a backend, while the real `list_games` command stays the default.
+// Dev-only fake library. Explicit opt-in only: the real `list_games` command is
+// always the default, including in a plain browser / `vite dev`.
 //
-// Enable:
-//   - open the app with `?mock=1`
-//   - or set localStorage `kudos.devMock` to "1"
-// Disable explicitly with `?mock=0` / `kudos.devMock` = "0".
-// In `vite dev` inside a plain browser (no Tauri internals) it turns on
-// automatically, because `invoke` cannot work there.
+// Enable:  open the app with `?mock=1`
+// Disable: `?mock=0` (or just omit the flag)
 //
-// OWNER: Session D.
+// OWNER: Session D. Session E removed the automatic browser/dev default so a
+// production build can never show fake games by accident.
 
 import type { Game } from "./types";
 
@@ -129,32 +126,13 @@ function normalize(game: DevGame): Game {
 
 export const DEV_GAMES: Game[] = SOURCE.map(normalize);
 
-const MOCK_KEY = "kudos.devMock";
-
 export function isDevMockEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
     const flag = new URLSearchParams(window.location.search).get("mock");
-    if (flag === "1") return true;
-    if (flag === "0") return false;
-
-    const stored = window.localStorage.getItem(MOCK_KEY);
-    if (stored === "1") return true;
-    if (stored === "0") return false;
+    return flag === "1";
   } catch {
-    /* private mode / disabled storage */
-  }
-
-  // Plain browser preview: the Tauri command layer does not exist there.
-  return import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
-}
-
-/** For Session E / debugging: null removes the override. */
-export function setDevMockPreference(on: boolean | null): void {
-  try {
-    if (on === null) window.localStorage.removeItem(MOCK_KEY);
-    else window.localStorage.setItem(MOCK_KEY, on ? "1" : "0");
-  } catch {
-    /* storage is best-effort */
+    /* no URL inspection available */
+    return false;
   }
 }

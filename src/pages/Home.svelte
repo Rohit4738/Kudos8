@@ -105,8 +105,8 @@
   });
   const emptyCopy = $derived(
     filter === "all"
-      ? "Your Steam, Epic and GOG libraries are empty. Install a game, then refresh."
-      : `No ${PLATFORM_LABEL[filter as Platform]} games in your library yet.`,
+      ? "Kudos looks for Steam, Epic and GOG games on this PC. If a store client is not installed, its games simply do not appear here."
+      : `No ${PLATFORM_LABEL[filter as Platform]} games found. That store may not be installed on this PC, or it has no games installed yet.`,
   );
 
   $effect(() => {
@@ -296,7 +296,7 @@
 
   <header class="head">
     <div class="head-copy">
-      <p class="eyebrow">Project Kudos</p>
+      <p class="eyebrow">Kudos</p>
       <h1>{greeting}</h1>
     </div>
 
@@ -304,7 +304,7 @@
       {#if library.usingMock}
         <span
           class="demo"
-          title="Dev mock data. Add ?mock=0 (or clear kudos.devMock) to use the real list_games command."
+          title="Preview data. Add ?mock=1 by hand to simulate a library; omit it to use the real list_games command."
         >
           Preview data
         </span>
