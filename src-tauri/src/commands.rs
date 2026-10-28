@@ -10,6 +10,7 @@ use tauri::{Manager, State};
 use crate::error::{SourceError, SourceResult};
 use crate::models::{AchievementSummary, Game, SteamStatus};
 use crate::state::AppState;
+use crate::steam_owned::{SteamPlaytime, SteamSyncStatus};
 
 /// Every game from every store, already merged and sorted.
 ///
@@ -48,9 +49,15 @@ fn allow_local_covers(app: &tauri::AppHandle, games: &[Game]) {
 /// Launch one game by id. The registry resolves the owning source.
 #[tauri::command]
 pub fn launch_game(state: State<'_, AppState>, game_id: String) -> SourceResult<()> {
-    let game = state
-        .find_game(&game_id)
-        .ok_or_else(|| SourceError::game_not_found(&game_id))?;
+    let Some(game) = state.find_game(&game_id) else {
+        // Session H: owned-but-not-installed Steam catalog entries are not part
+        // of any source's installed() scan. Route their install URI through the
+        // same launch helper. Not journaled: this starts an install, not a play.
+        if let Some(command) = crate::steam_owned::install_command(&state, &game_id) {
+            return crate::launch::open(&command);
+        }
+        return Err(SourceError::game_not_found(&game_id));
+    };
 
     let source = state
         .source_for(game.platform)
@@ -97,4 +104,46 @@ pub fn get_recent_games(state: State<'_, AppState>, limit: u32) -> Vec<crate::st
 #[tauri::command]
 pub fn get_achievements(game_id: String) -> AchievementSummary {
     crate::achievements::summary_for(&game_id)
+}
+
+/// Every Steam store app this account has touched that is not currently
+/// installed, as a normal `Game` with `steam://install/<appid>` as its command.
+///
+/// Additive command (Session H). Local-only: reads `localconfig.vdf` and the
+/// optional name cache. Never rejects; an absent Steam install returns `[]`.
+#[tauri::command]
+pub fn get_steam_owned_games(state: State<'_, AppState>) -> Vec<Game> {
+    crate::steam_owned::owned_games(&state)
+}
+
+/// Steam playtime for the active account, minutes + last two weeks + LastPlayed.
+///
+/// Additive command (Session H). Local-only and cached by `localconfig.vdf`
+/// mtime; never rejects.
+#[tauri::command]
+pub fn get_steam_playtime() -> Vec<SteamPlaytime> {
+    crate::steam_owned::playtime()
+}
+
+/// Name-cache status for the Settings/library sync affordance.
+///
+/// Additive command (Session H). Local-only, no network.
+#[tauri::command]
+pub fn get_steam_sync_status() -> SteamSyncStatus {
+    crate::steam_owned::sync_status()
+}
+
+/// Download Steam's public app list once, filter it to this account's app ids
+/// and atomically replace `%APPDATA%\Kudos\steam-apps.json`.
+///
+/// Additive command (Session H). This is the **only** network request in Kudos
+/// and it is only reachable from an explicit user action. Runs on a blocking
+/// worker so a slow response cannot freeze the WebView. Errors are plain strings.
+#[tauri::command]
+pub async fn sync_steam_metadata(state: State<'_, AppState>) -> Result<SteamSyncStatus, String> {
+    let known = crate::steam_owned::known_appids(&state);
+    drop(state);
+    tauri::async_runtime::spawn_blocking(move || crate::steam_owned::sync_metadata(known))
+        .await
+        .map_err(|err| format!("Steam metadata sync task failed: {err}"))?
 }

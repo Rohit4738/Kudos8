@@ -12,6 +12,7 @@ pub mod launch;
 pub mod models;
 pub mod sources;
 pub mod state;
+pub mod steam_owned;
 pub mod steam_recent;
 
 use state::AppState;
@@ -28,6 +29,10 @@ pub fn run() {
             commands::get_steam_status,
             commands::get_recent_games,
             commands::get_achievements,
+            commands::get_steam_owned_games,
+            commands::get_steam_playtime,
+            commands::get_steam_sync_status,
+            commands::sync_steam_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kudos");

@@ -38,7 +38,7 @@ use crate::models::{Game, Platform, SteamStatus};
 use crate::sources::LibrarySource;
 
 /// Steamworks Common Redistributables is not a game.
-const REDISTRIBUTABLE_APPID: u32 = 228_980;
+pub(crate) const REDISTRIBUTABLE_APPID: u32 = 228_980;
 /// SteamID64 = this + 32-bit account id.
 const STEAM_ID64_BASE: u64 = 76_561_197_960_265_728;
 const STEAM_CDN: &str = "https://cdn.cloudflare.steamstatic.com/steam/apps";
@@ -188,7 +188,7 @@ impl AppManifest {
     }
 }
 
-fn steam_cover_url(appid: u32) -> String {
+pub(crate) fn steam_cover_url(appid: u32) -> String {
     format!("{STEAM_CDN}/{appid}/library_600x900.jpg")
 }
 
