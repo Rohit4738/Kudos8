@@ -1,8 +1,9 @@
-//! Typed wrappers around the four Tauri commands. OWNER: Session A.
+//! Typed wrappers around the Tauri commands. OWNER: Session A.
 //! Session D: import from here, never call `invoke` directly with string literals.
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Game, SteamStatus } from "./types";
+import type { RecentGame } from "./recent";
 
 /** All games from Steam + Epic + GOG, merged and sorted by title. */
 export function listGames(): Promise<Game[]> {
@@ -22,4 +23,13 @@ export function addToSteam(gameId: string): Promise<void> {
 /** Steam client detection, for the Settings page. */
 export function getSteamStatus(): Promise<SteamStatus> {
   return invoke<SteamStatus>("get_steam_status");
+}
+
+/**
+ * Recently played ids, newest first. Additive Session G command:
+ * Steam `LastPlayed` merged with Kudos' own launch journal.
+ * Never rejects; an empty list simply hides the row.
+ */
+export function getRecentGames(limit = 12): Promise<RecentGame[]> {
+  return invoke<RecentGame[]>("get_recent_games", { limit });
 }
