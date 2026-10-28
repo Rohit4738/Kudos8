@@ -17,9 +17,45 @@
 
   let ready = $state(false);
   let failed = $state(false);
+  let attempt = $state(0);
 
-  const src = $derived(coverSource(game.coverImage));
+  /**
+   * Candidate chain, best first:
+   *  1. the backend's cover (local Steam cache / GOG.ico / CDN URL)
+   *  2. Steam's CDN 600x900 portrait art, derived from the stable id
+   *  3. Steam's wider header art (cropped by object-fit)
+   * Anything that fails all three falls back to the gradient-initial art.
+   */
+  const candidates = $derived.by(() => {
+    const list: string[] = [];
+    const primary = coverSource(game.coverImage);
+    if (primary) list.push(primary);
+
+    if (game.platform === "steam") {
+      const appid = game.id.startsWith("steam:") ? game.id.slice(6) : "";
+      if (/^\d+$/.test(appid)) {
+        list.push(
+          `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/library_600x900.jpg`,
+          `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`,
+        );
+      }
+    }
+
+    return [...new Set(list)];
+  });
+
+  const src = $derived(candidates[attempt] ?? null);
   const showImage = $derived(Boolean(src) && !failed);
+
+  function onError(): void {
+    if (attempt < candidates.length - 1) {
+      attempt += 1;
+      ready = false;
+    } else {
+      failed = true;
+      ready = false;
+    }
+  }
 </script>
 
 <div
@@ -36,10 +72,7 @@
       decoding="async"
       draggable="false"
       onload={() => (ready = true)}
-      onerror={() => {
-        failed = true;
-        ready = false;
-      }}
+      onerror={onError}
     />
   {/if}
 

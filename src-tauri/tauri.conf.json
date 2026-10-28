@@ -28,6 +28,13 @@
       }
     ],
     "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "C:\\Program Files (x86)\\Steam\\appcache\\librarycache\\**",
+          "C:\\Program Files\\Steam\\appcache\\librarycache\\**"
+        ]
+      },
       "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
     }
   },

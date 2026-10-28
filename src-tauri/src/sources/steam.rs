@@ -192,6 +192,24 @@ fn steam_cover_url(appid: u32) -> String {
     format!("{STEAM_CDN}/{appid}/library_600x900.jpg")
 }
 
+/// Local Steam library cache fallback for cover art.
+///
+/// Steam writes `library_600x900.jpg` under `<Steam>/appcache/librarycache/<appid>/`
+/// (older clients used a flat `<appid>_library_600x900.jpg` name). Returning the
+/// local file keeps the grid instant and works offline; the frontend falls back
+/// to the CDN URL derived from the stable id if the file cannot be decoded.
+fn steam_local_cover(root: &Path, appid: u32) -> Option<PathBuf> {
+    let cache = root.join("appcache").join("librarycache");
+    let candidates = [
+        cache.join(appid.to_string()).join("library_600x900.jpg"),
+        cache.join(format!("{appid}_library_600x900.jpg")),
+    ];
+
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+}
+
 fn cached_steam_root(cache: &mut ScanCache) -> Option<PathBuf> {
     if let Some(root) = &cache.root {
         if root.is_dir() {
@@ -269,7 +287,14 @@ fn scan_libraries(root: &Path, cache: &mut ScanCache) -> Vec<Game> {
                 // The same app manifest in two libraries after a move/leftover.
                 continue;
             }
-            games.push(manifest.to_game());
+
+            let mut game = manifest.to_game();
+            if let Some(local) = steam_local_cover(root, manifest.appid) {
+                // Prefer the cache Steam already wrote to disk: no network round
+                // trip, and covers still render when the CDN is unreachable.
+                game.cover_image = Some(local.to_string_lossy().into_owned());
+            }
+            games.push(game);
         }
     }
 
@@ -1604,6 +1629,46 @@ mod tests {
             game.cover_image.as_deref(),
             Some("https://cdn.cloudflare.steamstatic.com/steam/apps/730/library_600x900.jpg")
         );
+    }
+
+    #[test]
+    fn prefers_local_librarycache_cover_when_present() {
+        let dir = temp_dir("local-cover");
+        let steamapps = dir.path.join("steamapps");
+        let cache = dir
+            .path
+            .join("appcache")
+            .join("librarycache")
+            .join("730");
+        fs::create_dir_all(&steamapps).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        fs::copy(
+            fixture("appmanifest-730.acf"),
+            steamapps.join("appmanifest_730.acf"),
+        )
+        .unwrap();
+        let cover = cache.join("library_600x900.jpg");
+        fs::write(&cover, b"jpeg").unwrap();
+
+        let mut scan_cache = ScanCache::default();
+        let games = scan_libraries(&dir.path, &mut scan_cache);
+        let game = games.iter().find(|game| game.id == "steam:730").unwrap();
+
+        assert_eq!(
+            game.cover_image.as_deref(),
+            Some(cover.to_string_lossy().as_ref())
+        );
+
+        // Older flat cache layout is accepted too.
+        fs::remove_dir_all(cache.parent().unwrap()).unwrap();
+        let flat = dir
+            .path
+            .join("appcache")
+            .join("librarycache")
+            .join("730_library_600x900.jpg");
+        fs::create_dir_all(flat.parent().unwrap()).unwrap();
+        fs::write(&flat, b"jpeg").unwrap();
+        assert_eq!(steam_local_cover(&dir.path, 730), Some(flat));
     }
 
     #[test]
