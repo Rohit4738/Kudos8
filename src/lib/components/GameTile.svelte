@@ -15,9 +15,51 @@
     index: number;
     onSelect: (index: number) => void;
     onOpen: (game: Game) => void;
+    onHide: (game: Game) => void;
   }
 
-  let { game, active, index, onSelect, onOpen }: Props = $props();
+  let { game, active, index, onSelect, onOpen, onHide }: Props = $props();
+
+  const HOLD_MS = 650;
+  let pressTimer: ReturnType<typeof setTimeout> | undefined;
+  let suppressOpen = false;
+
+  function startPress(event: PointerEvent): void {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    cancelPress();
+    pressTimer = setTimeout(() => {
+      pressTimer = undefined;
+      suppressOpen = true;
+      // A held touch may never produce a click; clear the guard on its own.
+      setTimeout(() => {
+        suppressOpen = false;
+      }, 900);
+      onHide(game);
+    }, HOLD_MS);
+  }
+
+  function cancelPress(): void {
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = undefined;
+  }
+
+  function handleClick(): void {
+    if (suppressOpen) {
+      suppressOpen = false;
+      return;
+    }
+    onOpen(game);
+  }
+
+  function handleContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    cancelPress();
+    if (suppressOpen) {
+      suppressOpen = false;
+      return;
+    }
+    onHide(game);
+  }
 </script>
 
 <button
@@ -27,10 +69,16 @@
   aria-current={active ? "true" : undefined}
   aria-label={`${game.title}, ${platformShort(game.platform)}, ${
     game.isInstalled ? "installed" : "not downloaded"
-  }`}
+  }. Hold or right-click to hide.`}
+  title="Open · hold or right-click to hide"
   onmouseenter={() => onSelect(index)}
   onfocus={() => onSelect(index)}
-  onclick={() => onOpen(game)}
+  onpointerdown={startPress}
+  onpointerup={cancelPress}
+  onpointerleave={cancelPress}
+  onpointercancel={cancelPress}
+  oncontextmenu={handleContextMenu}
+  onclick={handleClick}
 >
   <span class="frame">
     <GameArt {game} />

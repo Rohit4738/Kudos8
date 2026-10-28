@@ -8,16 +8,26 @@
   import { fade } from "svelte/transition";
   import { coverSource, placeholderBackground } from "../lib/art";
   import { FILTERS, matchesFilter, type Filter, type FilterCounts } from "../lib/filter";
-  import { loadLibrary, library } from "../lib/library.svelte";
+  import {
+    hideGame as hideLibraryGame,
+    isHidden,
+    library,
+    libraryPrefs,
+    loadLibrary,
+    sortGames,
+  } from "../lib/library.svelte";
   import { navigate } from "../lib/router.svelte";
-  import { applyStoredAccent } from "../lib/theme";
+  import { applyStoredAccent, readCrossfade, storedBackground } from "../lib/theme";
+  import { pushToast } from "../lib/toast.svelte";
   import { onGamepad } from "../lib/gamepad";
   import { restoreFullscreenPref } from "../lib/windowPrefs";
   import { PLATFORM_LABEL, type Game, type Platform } from "../lib/types";
+  import ControlHint from "../lib/components/ControlHint.svelte";
   import FilterBar from "../lib/components/FilterBar.svelte";
   import GameTile from "../lib/components/GameTile.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import InfoPanel from "../lib/components/InfoPanel.svelte";
+  import Toaster from "../lib/components/Toaster.svelte";
 
   interface Ambient {
     key: string;
@@ -80,6 +90,8 @@
   let filter = $state<Filter>("all");
   let activeIndex = $state(0);
   let offset = $state(0);
+  let background = $state(storedBackground());
+  const crossfade = readCrossfade();
 
   let viewport = $state<HTMLDivElement | null>(null);
   let track = $state<HTMLDivElement | null>(null);
@@ -90,23 +102,31 @@
   let ambient = $state<Ambient>(ambientSnapshot);
   let ambientPrev = $state<Ambient | null>(null);
 
+  const shown = $derived(library.games.filter((game) => !isHidden(game.id)));
+  const hiddenCount = $derived(library.games.length - shown.length);
   const visible = $derived(
-    library.games.filter((game) => matchesFilter(game.platform, filter)),
+    sortGames(
+      shown.filter((game) => matchesFilter(game.platform, filter)),
+      libraryPrefs.sort,
+    ),
   );
   const active = $derived(
     visible.length === 0 ? 0 : Math.min(activeIndex, visible.length - 1),
   );
   const selected = $derived(visible[active] ?? null);
   const counts = $derived<FilterCounts>({
-    all: library.games.length,
-    steam: library.games.filter((game) => game.platform === "steam").length,
-    epic: library.games.filter((game) => game.platform === "epic").length,
-    gog: library.games.filter((game) => game.platform === "gog").length,
+    all: shown.length,
+    steam: shown.filter((game) => game.platform === "steam").length,
+    epic: shown.filter((game) => game.platform === "epic").length,
+    gog: shown.filter((game) => game.platform === "gog").length,
   });
+  const allHidden = $derived(library.games.length > 0 && shown.length === 0);
   const emptyCopy = $derived(
-    filter === "all"
-      ? "Kudos looks for Steam, Epic and GOG games on this PC. If a store client is not installed, its games simply do not appear here."
-      : `No ${PLATFORM_LABEL[filter as Platform]} games found. That store may not be installed on this PC, or it has no games installed yet.`,
+    allHidden && filter === "all"
+      ? "Every game is hidden. Unhide games in Settings, or use the hidden count in the header to review them."
+      : filter === "all"
+        ? "Kudos looks for Steam, Epic and GOG games on this PC. If a store client is not installed, its games simply do not appear here."
+        : `No ${PLATFORM_LABEL[filter as Platform]} games found. That store may not be installed on this PC, or it has no games installed yet.`,
   );
 
   $effect(() => {
@@ -192,6 +212,17 @@
 
   function openGame(game: Game): void {
     navigate({ name: "game", id: game.id });
+  }
+
+  async function hideSelected(game: Game): Promise<void> {
+    hideLibraryGame(game.id);
+    pushToast(
+      "info",
+      "Hidden from library",
+      `“${game.title}” is hidden. Unhide it from Settings at any time.`,
+    );
+    await tick();
+    centerOn(active);
   }
 
   function handlePad(action: string): void {
@@ -283,16 +314,18 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div class="home">
-  <div class="ambient" aria-hidden="true">
-    {#each ambientPrev ? [ambientPrev, ambient] : [ambient] as layer (layer.key)}
-      <div class="ambient-layer" style:background={layer.background}>
-        {#if layer.image}
-          <img src={layer.image} alt="" draggable="false" />
-        {/if}
-      </div>
-    {/each}
-    <div class="ambient-wash"></div>
-  </div>
+  {#if background === "ambient"}
+    <div class="ambient" aria-hidden="true">
+      {#each ambientPrev ? [ambientPrev, ambient] : [ambient] as layer (layer.key)}
+        <div class="ambient-layer" style:background={layer.background}>
+          {#if layer.image}
+            <img src={layer.image} alt="" draggable="false" />
+          {/if}
+        </div>
+      {/each}
+      <div class="ambient-wash"></div>
+    </div>
+  {/if}
 
   <header class="head">
     <div class="head-copy">
@@ -313,10 +346,20 @@
         {#if library.status === "loading" && library.games.length === 0}
           Scanning…
         {:else}
-          <strong>{library.games.length}</strong>
-          {library.games.length === 1 ? "game" : "games"}
+          <strong>{shown.length}</strong>
+          {shown.length === 1 ? "game" : "games"}
         {/if}
       </span>
+      {#if hiddenCount > 0}
+        <button
+          type="button"
+          class="hidden-chip"
+          title="Review hidden games in Settings"
+          onclick={() => navigate({ name: "settings" })}
+        >
+          {hiddenCount} hidden
+        </button>
+      {/if}
     </div>
   </header>
 
@@ -351,7 +394,12 @@
           <h2>No games found</h2>
           <p>{emptyCopy}</p>
         </div>
-        {#if filter === "all"}
+        {#if allHidden && filter === "all"}
+          <button type="button" class="state-action" onclick={() => navigate({ name: "settings" })}>
+            <Icon name="sliders" size={15} />
+            Manage hidden games
+          </button>
+        {:else if filter === "all"}
           <button type="button" class="state-action" onclick={() => void refreshLibrary(true)}>
             <Icon name="refresh" size={15} />
             Refresh
@@ -376,6 +424,7 @@
             index={index}
             onSelect={select}
             onOpen={openGame}
+            onHide={(hidden) => void hideSelected(hidden)}
           />
         {/each}
       </div>
@@ -384,35 +433,31 @@
 
   <div class="lower">
     {#if visible.length > 0}
-      <InfoPanel game={selected} index={active} total={visible.length} onOpen={openGame} />
+      <InfoPanel
+        game={selected}
+        index={active}
+        total={visible.length}
+        onOpen={openGame}
+        {crossfade}
+      />
     {/if}
   </div>
 
   <footer class="hints">
-    <span class="hint">
-      <Icon name="keyboard" size={13} />
-      Arrows / WASD browse
-      <span class="dot-sep">·</span>
-      ↑↓ filter
-      <span class="dot-sep">·</span>
-      Enter open
-    </span>
-    <span class="hint">
-      <Icon name="gamepad" size={14} />
-      D-pad browse
-      <span class="dot-sep">·</span>
-      A open
-      <span class="dot-sep">·</span>
-      B back
-    </span>
-    <span class="hint subtle">Esc back</span>
+    <ControlHint action="dpad" keys="← →" label="Browse" />
+    <ControlHint action="dpad" keys="↑ ↓" label="Filter" />
+    <ControlHint action="confirm" keys="Enter" label="Open" />
+    <ControlHint action="back" keys="Esc" label="Back" />
+    <span class="hint subtle">Hold a tile or right-click to hide</span>
   </footer>
 </div>
 
+<Toaster />
+
 <style>
   .home {
-    --tile-w: clamp(150px, 23vh, 280px);
-    --tile-gap: clamp(16px, 2vh, 26px);
+    --tile-w: calc(clamp(150px, 23vh, 280px) * var(--tile-scale, 1));
+    --tile-gap: calc(clamp(16px, 2vh, 26px) * var(--tile-scale, 1));
     position: relative;
     min-height: 100%;
     display: flex;
@@ -528,6 +573,26 @@
   .libcount strong {
     color: var(--fg-0);
     font-weight: 600;
+  }
+
+  .hidden-chip {
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+
+  .hidden-chip:hover {
+    color: var(--fg-0);
+    transform: translateY(-1px);
   }
 
   /* ---------- rail ---------- */
@@ -727,13 +792,9 @@
     opacity: 0.7;
   }
 
-  .dot-sep {
-    opacity: 0.38;
-  }
-
   @media (max-width: 860px) {
     .home {
-      --tile-w: clamp(136px, 20vh, 200px);
+      --tile-w: calc(clamp(136px, 20vh, 200px) * var(--tile-scale, 1));
     }
     .hint:nth-child(2) {
       display: none;

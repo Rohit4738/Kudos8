@@ -28,8 +28,17 @@
   --dur-slow: 480ms;
 
   --rail-w: 92px;
+  --tile-scale: 1;
   --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
     "Helvetica Neue", Arial, sans-serif;
+}
+
+:root[data-density="compact"] {
+  --tile-scale: 0.82;
+}
+
+:root[data-density="large"] {
+  --tile-scale: 1.18;
 }
 
 * {

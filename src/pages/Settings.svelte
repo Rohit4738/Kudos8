@@ -6,25 +6,62 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getSteamStatus } from "../lib/api";
+  import {
+    controller,
+    effectiveLayout,
+    PAD_LAYOUT_LABEL,
+    PAD_OVERRIDES,
+    refreshController,
+    setPadOverride,
+    type PadLayout,
+    type PadOverride,
+  } from "../lib/controller.svelte";
   import { humanError } from "../lib/format";
   import { onGamepad } from "../lib/gamepad";
+  import {
+    isHidden,
+    library,
+    libraryPrefs,
+    loadLibrary,
+    setSortMode,
+    SORT_OPTIONS,
+    unhideAll,
+    unhideGame,
+    type SortMode,
+  } from "../lib/library.svelte";
   import { back } from "../lib/router.svelte";
   import {
     DEFAULT_ACCENT,
     ACCENT_PRESETS,
+    BACKGROUND_OPTIONS,
+    DENSITY_OPTIONS,
     applyAccent,
+    applyBackground,
+    applyDensity,
     applyStoredAccent,
+    applyStoredBackground,
+    applyStoredDensity,
+    readCrossfade,
+    setCrossfade,
     storedAccent,
+    storedBackground,
+    storedDensity,
+    type BackgroundMode,
+    type DensityMode,
   } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
   import {
     currentFullscreen,
     isTauriRuntime,
     readFullscreenPref,
+    readStartupPage,
+    saveStartupPage,
     setBorderlessFullscreen,
+    type StartupPage,
   } from "../lib/windowPrefs";
   import type { SteamStatus } from "../lib/types";
   import Icon from "../lib/components/Icon.svelte";
+  import PadGlyph from "../lib/components/PadGlyph.svelte";
   import Spinner from "../lib/components/Spinner.svelte";
   import Toaster from "../lib/components/Toaster.svelte";
 
@@ -33,13 +70,29 @@
   let accent = $state(storedAccent());
   let fullscreen = $state(readFullscreenPref());
   let fullscreenBusy = $state(false);
+  let background = $state(storedBackground());
+  let density = $state(storedDensity());
+  let crossfade = $state(readCrossfade());
+  let startup = $state(readStartupPage());
 
   let steam = $state<SteamStatus | null>(null);
   let steamLoading = $state(true);
   let steamError = $state<string | null>(null);
 
+  const hiddenGames = $derived(
+    library.games.filter((game) => isHidden(game.id)),
+  );
+  const glyphLayout = $derived.by((): Exclude<PadLayout, "keyboard"> | null => {
+    const layout = effectiveLayout();
+    return layout === "keyboard" ? null : layout;
+  });
+
   onMount(() => {
     applyStoredAccent();
+    applyStoredBackground();
+    applyStoredDensity();
+    refreshController();
+    if (library.status === "idle") void loadLibrary();
     void syncWindowState();
     void loadSteam();
 
@@ -87,6 +140,37 @@
   function onCustomInput(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     chooseAccent(input.value);
+  }
+
+  function chooseBackground(value: BackgroundMode): void {
+    background = applyBackground(value);
+  }
+
+  function chooseDensity(value: DensityMode): void {
+    density = applyDensity(value);
+  }
+
+  function chooseSort(value: SortMode): void {
+    setSortMode(value);
+  }
+
+  function chooseStartup(value: StartupPage): void {
+    startup = value;
+    saveStartupPage(value);
+    pushToast(
+      "info",
+      value === "settings" ? "Settings opens first" : "Library opens first",
+      "The next time Kudos starts.",
+    );
+  }
+
+  function toggleCrossfade(): void {
+    crossfade = !crossfade;
+    setCrossfade(crossfade);
+  }
+
+  function choosePad(value: PadOverride): void {
+    setPadOverride(value);
   }
 
   async function loadSteam(): Promise<void> {
@@ -170,6 +254,221 @@
           Reset
         </button>
       </div>
+    </section>
+
+    <section class="card personal-card">
+      <div class="card-head">
+        <span class="card-icon">
+          <Icon name="sliders" size={18} />
+        </span>
+        <div>
+          <h2>Personalization</h2>
+          <p>How the library looks and what it opens on.</p>
+        </div>
+      </div>
+
+      <div class="pref">
+        <div class="pref-copy">
+          <p>Background</p>
+          <span>Ambient uses the selected game's art. Gradient drifts slowly.</span>
+        </div>
+        <div class="segmented" role="group" aria-label="Background style">
+          {#each BACKGROUND_OPTIONS as option (option.value)}
+            <button
+              type="button"
+              class="seg"
+              class:active={background === option.value}
+              aria-pressed={background === option.value}
+              onclick={() => chooseBackground(option.value)}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref">
+        <div class="pref-copy">
+          <p>Tile density</p>
+          <span>Compact fits more games on screen; large gives art more room.</span>
+        </div>
+        <div class="segmented" role="group" aria-label="Tile density">
+          {#each DENSITY_OPTIONS as option (option.value)}
+            <button
+              type="button"
+              class="seg"
+              class:active={density === option.value}
+              aria-pressed={density === option.value}
+              onclick={() => chooseDensity(option.value)}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref">
+        <div class="pref-copy">
+          <p>Sort library</p>
+          <span>Applied instantly on the home rail.</span>
+        </div>
+        <div class="segmented" role="group" aria-label="Sort library">
+          {#each SORT_OPTIONS as option (option.value)}
+            <button
+              type="button"
+              class="seg"
+              class:active={libraryPrefs.sort === option.value}
+              aria-pressed={libraryPrefs.sort === option.value}
+              onclick={() => chooseSort(option.value)}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref">
+        <div class="pref-copy">
+          <p>Start page</p>
+          <span>Which page Kudos opens when it launches.</span>
+        </div>
+        <div class="segmented" role="group" aria-label="Start page">
+          <button
+            type="button"
+            class="seg"
+            class:active={startup === "home"}
+            aria-pressed={startup === "home"}
+            onclick={() => chooseStartup("home")}
+          >
+            Library
+          </button>
+          <button
+            type="button"
+            class="seg"
+            class:active={startup === "settings"}
+            aria-pressed={startup === "settings"}
+            onclick={() => chooseStartup("settings")}
+          >
+            Settings
+          </button>
+        </div>
+      </div>
+
+      <div class="row crossfade-row">
+        <div class="row-copy">
+          <p>Info panel crossfade</p>
+          <span>Fade the lower panel when browsing. Turn off for an instant swap.</span>
+        </div>
+        <button
+          type="button"
+          class="toggle"
+          class:on={crossfade}
+          role="switch"
+          aria-checked={crossfade}
+          aria-label="Info panel crossfade"
+          onclick={toggleCrossfade}
+        >
+          <span class="knob"></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="card controller-card">
+      <div class="card-head">
+        <span class="card-icon">
+          <Icon name="gamepad" size={18} />
+        </span>
+        <div>
+          <h2>Controller</h2>
+          <p>Glyphs follow the pad you connect, live.</p>
+        </div>
+      </div>
+
+      <div class="pad-status">
+        <span class="pad-dot" class:on={controller.connected}></span>
+        <div class="pad-copy">
+          {#if controller.connected}
+            <strong>{controller.id || "Controller connected"}</strong>
+            <span>
+              {PAD_LAYOUT_LABEL[controller.detected]} layout detected
+              {#if controller.preview}· preview{/if}
+            </span>
+          {:else}
+            <strong>No controller detected</strong>
+            <span>Keyboard hints are shown. Connect a pad and press a button.</span>
+          {/if}
+        </div>
+      </div>
+
+      {#if glyphLayout}
+        <div class="pad-glyphs" aria-label="Face button glyphs">
+          <PadGlyph layout={glyphLayout} action="confirm" size={20} />
+          <PadGlyph layout={glyphLayout} action="back" size={20} />
+          <PadGlyph layout={glyphLayout} action="secondary" size={20} />
+          <PadGlyph layout={glyphLayout} action="quaternary" size={20} />
+        </div>
+      {/if}
+
+      <div class="segmented wrap" role="group" aria-label="Controller glyph layout">
+        {#each PAD_OVERRIDES as option (option.value)}
+          <button
+            type="button"
+            class="seg"
+            class:active={controller.override === option.value}
+            aria-pressed={controller.override === option.value}
+            onclick={() => choosePad(option.value)}
+          >
+            {option.label}
+          </button>
+        {/each}
+      </div>
+
+      <p class="note">
+        Auto follows the pad name. Choose Keyboard to always see keycaps, or force
+        a layout when a generic pad is misidentified. PlayStation ✕ ○ □ △ are drawn
+        as inline SVG, not an icon font.
+      </p>
+    </section>
+
+    <section class="card hidden-card">
+      <div class="card-head">
+        <span class="card-icon">
+          <Icon name="hide" size={18} />
+        </span>
+        <div>
+          <h2>Hidden games</h2>
+          <p>Hidden games stay installed and launchable; the home rail skips them.</p>
+        </div>
+      </div>
+
+      {#if library.status === "loading" && hiddenGames.length === 0}
+        <div class="steam-loading">
+          <Spinner size={16} />
+          Reading your library…
+        </div>
+      {:else if hiddenGames.length === 0}
+        <p class="note">Nothing is hidden. Right-click a tile, hold it, or use Hide on its detail page.</p>
+      {:else}
+        <ul class="hidden-list">
+          {#each hiddenGames as game (game.id)}
+            <li>
+              <span class="hidden-name" title={game.title}>{game.title}</span>
+              <button
+                type="button"
+                class="text-btn"
+                onclick={() => unhideGame(game.id)}
+              >
+                <Icon name="eye" size={14} />
+                Unhide
+              </button>
+            </li>
+          {/each}
+        </ul>
+        <button type="button" class="text-btn unhide-all" onclick={unhideAll}>
+          <Icon name="refresh" size={14} />
+          Unhide all
+        </button>
+      {/if}
     </section>
 
     <section class="card">
@@ -361,6 +660,10 @@
     grid-column: span 2;
   }
 
+  .personal-card {
+    grid-column: span 2;
+  }
+
   .card-head {
     display: flex;
     align-items: flex-start;
@@ -506,6 +809,163 @@
     align-items: center;
     gap: 12px;
     margin-top: 20px;
+  }
+
+  /* ---------- personalization ---------- */
+  .pref {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 13px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  }
+
+  .pref-copy {
+    min-width: 0;
+  }
+
+  .pref-copy p {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 550;
+    color: var(--fg-0);
+  }
+
+  .pref-copy span {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--fg-2);
+  }
+
+  .segmented {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.045);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .segmented.wrap {
+    flex-wrap: wrap;
+    border-radius: 14px;
+    margin-top: 2px;
+  }
+
+  .seg {
+    padding: 6px 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 550;
+    color: var(--fg-2);
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+    white-space: nowrap;
+  }
+
+  .seg:hover {
+    color: var(--fg-0);
+  }
+
+  .seg.active {
+    color: var(--fg-0);
+    background: color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, 0.08));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+  }
+
+  .crossfade-row {
+    padding-top: 16px;
+  }
+
+  /* ---------- controller ---------- */
+  .pad-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+    min-width: 0;
+  }
+
+  .pad-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: var(--fg-2);
+  }
+
+  .pad-dot.on {
+    background: var(--ok);
+    box-shadow: 0 0 10px rgba(61, 220, 151, 0.55);
+  }
+
+  .pad-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .pad-copy strong {
+    font-size: 12.5px;
+    font-weight: 550;
+    color: var(--fg-0);
+    overflow-wrap: anywhere;
+  }
+
+  .pad-copy span {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--fg-2);
+  }
+
+  .pad-glyphs {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: -4px 0 16px 18px;
+    opacity: 0.9;
+  }
+
+  /* ---------- hidden games ---------- */
+  .hidden-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hidden-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  }
+
+  .hidden-name {
+    min-width: 0;
+    font-size: 12px;
+    color: var(--fg-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hidden-list .text-btn {
+    flex: 0 0 auto;
+    align-self: center;
+  }
+
+  .unhide-all {
+    margin-top: 14px;
   }
 
   .token {
@@ -726,8 +1186,13 @@
       grid-template-columns: 1fr;
     }
     .accent-card,
+    .personal-card,
     .about-card {
       grid-column: auto;
+    }
+    .pref {
+      flex-direction: column;
+      gap: 10px;
     }
     .head {
       flex-direction: column;

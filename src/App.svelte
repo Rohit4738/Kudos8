@@ -5,7 +5,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fade } from "svelte/transition";
+  import { startController } from "./lib/controller.svelte";
   import { router, navigate, back } from "./lib/router.svelte";
+  import { applyStoredBackground, applyStoredDensity } from "./lib/theme";
+  import { readStartupPage } from "./lib/windowPrefs";
   import Home from "./pages/Home.svelte";
   import GameDetail from "./pages/GameDetail.svelte";
   import Settings from "./pages/Settings.svelte";
@@ -22,12 +25,25 @@
   }
 
   onMount(() => {
+    applyStoredBackground();
+    applyStoredDensity();
+    const stopController = startController();
+
+    // A direct jump (no history entry): startup should not create a fake "back".
+    if (router.route.name === "home" && readStartupPage() === "settings") {
+      router.route = { name: "settings" };
+    }
+
     window.addEventListener("keydown", onKeydown);
-    return () => window.removeEventListener("keydown", onKeydown);
+    return () => {
+      stopController();
+      window.removeEventListener("keydown", onKeydown);
+    };
   });
 </script>
 
 <div class="shell">
+  <div class="backdrop" aria-hidden="true"></div>
   <nav class="rail" aria-label="Primary">
     <button
       class="brand"
@@ -79,13 +95,58 @@
 
 <style>
   .shell {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: grid;
     grid-template-columns: var(--rail-w) 1fr;
     height: 100%;
+  }
+
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
     background:
       radial-gradient(1200px 700px at 78% -12%, rgba(76, 141, 255, 0.18), transparent 62%),
       radial-gradient(900px 600px at 4% 110%, rgba(123, 76, 255, 0.12), transparent 60%),
       linear-gradient(160deg, var(--bg-1) 0%, var(--bg-0) 100%);
+  }
+
+  :global(html[data-background="solid"]) .backdrop {
+    background: var(--bg-0);
+  }
+
+  :global(html[data-background="gradient"]) .backdrop {
+    inset: -18%;
+    background:
+      radial-gradient(42% 54% at 28% 30%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 70%),
+      radial-gradient(40% 48% at 76% 72%, rgba(123, 76, 255, 0.28), transparent 70%),
+      linear-gradient(135deg, #05060a 0%, #0b1220 52%, #05060a 100%);
+    animation: backdrop-drift 26s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  @keyframes backdrop-drift {
+    from {
+      transform: translate3d(-2.5%, -2%, 0) scale(1.04);
+    }
+    to {
+      transform: translate3d(2.5%, 2%, 0) scale(1.12);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(html[data-background="gradient"]) .backdrop {
+      animation: none;
+    }
+  }
+
+  .rail,
+  .stage {
+    position: relative;
+    z-index: 1;
   }
 
   .rail {

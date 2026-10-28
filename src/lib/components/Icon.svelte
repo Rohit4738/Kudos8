@@ -14,7 +14,10 @@
       | "library"
       | "sliders"
       | "spark"
-      | "refresh";
+      | "refresh"
+      | "trophy"
+      | "hide"
+      | "eye";
     size?: number;
     stroke?: number;
   }
@@ -73,5 +76,17 @@
   {:else if name === "refresh"}
     <path d="M20 11a8 8 0 1 0-2.3 6.1" />
     <path d="M20 4.5V11h-6.5" />
+  {:else if name === "trophy"}
+    <path d="M8 4.5h8v5a4 4 0 0 1-8 0v-5Z" />
+    <path d="M8 5.5H5.5v1.8A3.2 3.2 0 0 0 8.7 10.5M16 5.5h2.5v1.8a3.2 3.2 0 0 1-3.2 3.2" />
+    <path d="M12 13.5v3.2M8.5 19.5h7" />
+  {:else if name === "hide"}
+    <path d="M3 3l18 18" />
+    <path d="M10.6 6.3A9.7 9.7 0 0 1 12 6.2c4.4 0 7.5 3 9 5.8a13 13 0 0 1-2.2 2.8" />
+    <path d="M6.3 7.4A13.4 13.4 0 0 0 3 12c1.5 2.8 4.6 5.8 9 5.8 1.2 0 2.3-.2 3.3-.6" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+  {:else if name === "eye"}
+    <path d="M3 12c1.5-2.8 4.6-5.8 9-5.8s7.5 3 9 5.8c-1.5 2.8-4.6 5.8-9 5.8S4.5 14.8 3 12Z" />
+    <circle cx="12" cy="12" r="2.6" />
   {/if}
 </svg>

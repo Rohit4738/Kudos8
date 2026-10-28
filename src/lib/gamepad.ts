@@ -3,7 +3,9 @@
 // shoulders / triggers page. Only transform/opacity animations live in the UI;
 // this file never measures layout, so the loop stays cheap.
 //
-// OWNER: Session D.
+// OWNER: Session D / Session F (layout-aware button map).
+
+import { effectiveLayout } from "./controller.svelte";
 
 export type PadAction =
   | "left"
@@ -46,6 +48,16 @@ const BUTTON_MAP: Record<number, PadAction> = {
   14: "left",
   15: "right",
 };
+
+/** Nintendo's physical A/B/X sit opposite Xbox's; swap confirm/back. */
+function actionForButton(index: number, nintendo: boolean): PadAction | undefined {
+  if (nintendo) {
+    if (index === 0) return "back";
+    if (index === 1) return "confirm";
+    if (index === 3) return "secondary";
+  }
+  return BUTTON_MAP[index];
+}
 
 const ALL_ACTIONS: PadAction[] = [
   "left",
@@ -112,9 +124,10 @@ function readActiveActions(): Set<PadAction> {
   const pad = firstConnected();
   if (!pad) return active;
 
+  const nintendo = effectiveLayout() === "nintendo";
   for (let index = 0; index < pad.buttons.length; index += 1) {
     const button = pad.buttons[index];
-    const action = BUTTON_MAP[index];
+    const action = actionForButton(index, nintendo);
     if (action && button?.pressed) active.add(action);
   }
 

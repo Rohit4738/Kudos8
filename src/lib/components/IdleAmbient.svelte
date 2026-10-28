@@ -504,7 +504,7 @@
     height: 100%;
     object-fit: cover;
     object-position: center;
-    opacity: 0.9;
+    opacity: 0.82;
     pointer-events: none;
     user-select: none;
   }
@@ -544,17 +544,22 @@
     background:
       linear-gradient(
         180deg,
-        rgba(3, 4, 7, 0.55) 0%,
-        rgba(3, 4, 7, 0.08) 26%,
-        rgba(3, 4, 7, 0.16) 58%,
-        rgba(3, 4, 7, 0.86) 100%
+        rgba(3, 4, 7, 0.64) 0%,
+        rgba(3, 4, 7, 0.18) 28%,
+        rgba(3, 4, 7, 0.28) 60%,
+        rgba(3, 4, 7, 0.9) 100%
       ),
-      linear-gradient(90deg, rgba(3, 4, 7, 0.72) 0%, transparent 46%),
+      linear-gradient(
+        90deg,
+        rgba(3, 4, 7, 0.82) 0%,
+        rgba(3, 4, 7, 0.22) 46%,
+        transparent 72%
+      ),
       radial-gradient(
-        105% 85% at 50% 42%,
-        transparent 30%,
-        rgba(3, 4, 7, 0.34) 72%,
-        rgba(3, 4, 7, 0.82) 100%
+        112% 88% at 50% 42%,
+        rgba(3, 4, 7, 0.14) 22%,
+        rgba(3, 4, 7, 0.42) 68%,
+        rgba(3, 4, 7, 0.88) 100%
       );
   }
 

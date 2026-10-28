@@ -6,6 +6,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "./art";
 
 const FULLSCREEN_KEY = "kudos.fullscreen";
+const STARTUP_KEY = "kudos.startupPage";
+
+export type StartupPage = "home" | "settings";
 
 export { isTauriRuntime };
 
@@ -50,5 +53,24 @@ export async function restoreFullscreenPref(): Promise<void> {
     }
   } catch {
     /* A failed restore must never block the library. */
+  }
+}
+
+/** Which page Kudos opens on. */
+export function readStartupPage(): StartupPage {
+  try {
+    return window.localStorage.getItem(STARTUP_KEY) === "settings"
+      ? "settings"
+      : "home";
+  } catch {
+    return "home";
+  }
+}
+
+export function saveStartupPage(page: StartupPage): void {
+  try {
+    window.localStorage.setItem(STARTUP_KEY, page);
+  } catch {
+    /* storage is best-effort */
   }
 }

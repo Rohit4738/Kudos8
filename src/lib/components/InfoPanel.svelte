@@ -5,19 +5,24 @@
 -->
 <script lang="ts">
   import { fade, fly } from "svelte/transition";
+  import { effectiveLayout } from "../controller.svelte";
   import { formatBytes, playState } from "../format";
   import type { Game } from "../types";
+  import ControlHint from "./ControlHint.svelte";
   import Icon from "./Icon.svelte";
+  import PadGlyph from "./PadGlyph.svelte";
   import PlatformBadge from "./PlatformBadge.svelte";
 
   interface Props {
     game: Game | null;
     index: number;
     total: number;
+    crossfade?: boolean;
     onOpen: (game: Game) => void;
   }
 
-  let { game, index, total, onOpen }: Props = $props();
+  let { game, index, total, crossfade = true, onOpen }: Props = $props();
+  const layout = $derived(effectiveLayout());
 </script>
 
 <section class="info" aria-live="polite">
@@ -25,8 +30,8 @@
     {#key game.id}
       <div
         class="inner"
-        in:fly={{ y: 14, duration: 320, opacity: 0 }}
-        out:fade={{ duration: 200 }}
+        in:fly={crossfade ? { y: 14, duration: 320, opacity: 0 } : { y: 0, duration: 0 }}
+        out:fade={crossfade ? { duration: 200 } : { duration: 0 }}
       >
         <div class="meta">
           <div class="badges">
@@ -54,7 +59,11 @@
 
           <button type="button" class="cta" onclick={() => onOpen(game)}>
             <span>Open game</span>
-            <kbd>Enter</kbd>
+            {#if layout === "keyboard"}
+              <kbd>Enter</kbd>
+            {:else}
+              <PadGlyph {layout} action="confirm" size={17} />
+            {/if}
             <Icon name="arrow-right" size={16} />
           </button>
         </div>
@@ -63,10 +72,7 @@
   {:else}
     <div class="idle">
       <p>Select a game to see its details</p>
-      <span class="hintline">
-        <Icon name="gamepad" size={15} />
-        D-pad to browse
-      </span>
+      <ControlHint action="dpad" keys="← →" label="Browse" />
     </div>
   {/if}
 </section>
@@ -240,14 +246,6 @@
     font-weight: 500;
     letter-spacing: -0.01em;
     color: var(--fg-1);
-  }
-
-  .hintline {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 11px;
-    color: var(--fg-2);
   }
 
   @media (max-width: 720px) {
