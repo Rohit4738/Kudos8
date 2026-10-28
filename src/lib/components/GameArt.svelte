@@ -20,13 +20,6 @@
 
   const src = $derived(coverSource(game.coverImage));
   const showImage = $derived(Boolean(src) && !failed);
-
-  // Reset when a reused instance is handed a different game.
-  $effect(() => {
-    void game.id;
-    ready = false;
-    failed = false;
-  });
 </script>
 
 <div

@@ -141,10 +141,10 @@
     };
   });
 
-  async function refreshLibrary(): Promise<void> {
+  async function refreshLibrary(force = false): Promise<void> {
     activeIndex = 0;
     offset = 0;
-    await loadLibrary(library.status === "error");
+    await loadLibrary(force);
     await tick();
     centerOn(0);
   }
@@ -333,26 +333,26 @@
         {/each}
       </div>
     {:else if library.status === "error" && library.games.length === 0}
-      <div class="state-card" transition:fade={{ duration: 220 }}>
+      <div class="state-card" in:fade={{ duration: 220 }}>
         <span class="state-icon danger"><Icon name="alert" size={22} /></span>
         <div class="state-copy">
           <h2>Couldn't read your library</h2>
           <p>{library.error}</p>
         </div>
-        <button type="button" class="state-action" onclick={() => void refreshLibrary()}>
+        <button type="button" class="state-action" onclick={() => void refreshLibrary(true)}>
           <Icon name="refresh" size={15} />
           Retry
         </button>
       </div>
     {:else if visible.length === 0}
-      <div class="state-card" transition:fade={{ duration: 220 }}>
+      <div class="state-card" in:fade={{ duration: 220 }}>
         <span class="state-icon"><Icon name="library" size={22} /></span>
         <div class="state-copy">
           <h2>No games found</h2>
           <p>{emptyCopy}</p>
         </div>
         {#if filter === "all"}
-          <button type="button" class="state-action" onclick={() => void refreshLibrary()}>
+          <button type="button" class="state-action" onclick={() => void refreshLibrary(true)}>
             <Icon name="refresh" size={15} />
             Refresh
           </button>
@@ -411,8 +411,8 @@
 
 <style>
   .home {
-    --tile-w: clamp(146px, 20.5vh, 256px);
-    --tile-gap: clamp(14px, 1.9vh, 24px);
+    --tile-w: clamp(150px, 23vh, 280px);
+    --tile-gap: clamp(16px, 2vh, 26px);
     position: relative;
     min-height: 100%;
     display: flex;
@@ -435,7 +435,7 @@
     inset: -8%;
     background-size: cover;
     background-position: center;
-    opacity: 0.52;
+    opacity: 0.6;
     animation: ambient-in 900ms var(--ease-out) both;
     will-change: opacity;
   }
@@ -444,9 +444,9 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    filter: blur(52px) saturate(1.25) brightness(0.7);
+    filter: blur(40px) saturate(1.3) brightness(0.66);
     transform: scale(1.12);
-    opacity: 0.92;
+    opacity: 0.95;
   }
 
   .ambient-wash {
@@ -468,7 +468,7 @@
       opacity: 0;
     }
     to {
-      opacity: 0.52;
+      opacity: 0.6;
     }
   }
 
@@ -536,12 +536,32 @@
     display: flex;
     align-items: center;
     min-height: calc(var(--tile-w) * 1.5 + 64px);
-    padding-block: 26px;
-    margin-block: -26px;
+    padding-block: 30px;
     overflow: hidden;
   }
 
+  .rail-viewport::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(64vw, 760px);
+    height: 78%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--accent) 17%, transparent) 0%,
+      transparent 68%
+    );
+    filter: blur(18px);
+    pointer-events: none;
+    opacity: 0.9;
+  }
+
   .rail-track {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: var(--tile-gap);
@@ -554,6 +574,8 @@
 
   /* ---------- skeleton ---------- */
   .skeleton-track {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: var(--tile-gap);
@@ -711,7 +733,7 @@
 
   @media (max-width: 860px) {
     .home {
-      --tile-w: clamp(132px, 18vh, 190px);
+      --tile-w: clamp(136px, 20vh, 200px);
     }
     .hint:nth-child(2) {
       display: none;

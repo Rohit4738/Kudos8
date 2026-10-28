@@ -17,7 +17,7 @@
       <div
         class="toast {toast.kind}"
         role={toast.kind === "error" ? "alert" : "status"}
-        transition:fly={{ y: 16, duration: 260, opacity: 0 }}
+        in:fly={{ y: 16, duration: 260, opacity: 0 }}
         out:fade={{ duration: 160 }}
       >
         <span class="glyph" aria-hidden="true">

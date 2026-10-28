@@ -4,8 +4,8 @@
   OWNER: Session D.
 -->
 <script lang="ts">
-  import { fly } from "svelte/transition";
-  import { formatBytes, playState, shortPlayState } from "../format";
+  import { fade, fly } from "svelte/transition";
+  import { formatBytes, playState } from "../format";
   import type { Game } from "../types";
   import Icon from "./Icon.svelte";
   import PlatformBadge from "./PlatformBadge.svelte";
@@ -26,6 +26,7 @@
       <div
         class="inner"
         in:fly={{ y: 14, duration: 320, opacity: 0 }}
+        out:fade={{ duration: 200 }}
       >
         <div class="meta">
           <div class="badges">
@@ -73,12 +74,19 @@
 <style>
   .info {
     min-height: 132px;
-    display: flex;
-    align-items: flex-end;
+    display: grid;
+    align-items: end;
     padding-top: 18px;
     border-top: 1px solid rgba(255, 255, 255, 0.07);
     position: relative;
     z-index: 4;
+  }
+
+  /* Both the outgoing and incoming panel occupy the same grid cell, so the
+     crossfade never pushes the rail or the footer around. */
+  .inner,
+  .idle {
+    grid-area: 1 / 1;
   }
 
   .inner {

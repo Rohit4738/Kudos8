@@ -59,6 +59,11 @@ export function humanError(error: unknown): string {
     .replace(/^not implemented yet:\s*/i, "Not available yet: ")
     .trim();
 
+  // Plain-browser previews have no Tauri IPC bridge; keep that out of user copy.
+  if (/reading ['"]?invoke['"]?|invoke is not a function|__TAURI_INTERNALS__/i.test(text)) {
+    return "The desktop bridge is unavailable. Open Kudos as the desktop app.";
+  }
+
   return text.length > 0 ? text : "Something went wrong.";
 }
 
