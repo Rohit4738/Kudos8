@@ -86,3 +86,30 @@ pub struct SteamStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steam_path: Option<String>,
 }
+
+/// Local Steam achievement summary. Owned by Session F.
+///
+/// Additive to the original contract: `supported == false` means the UI must
+/// render nothing (or a plain "not available" line) and `total`/`unlocked` are
+/// both zero. No network request and no Steam API key are involved; the numbers
+/// come from Steam's own `appcache/stats` files.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AchievementSummary {
+    pub supported: bool,
+    pub unlocked: u32,
+    pub total: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl AchievementSummary {
+    pub fn unsupported(reason: impl Into<String>) -> Self {
+        Self {
+            supported: false,
+            unlocked: 0,
+            total: 0,
+            reason: Some(reason.into()),
+        }
+    }
+}
