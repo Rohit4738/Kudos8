@@ -496,4 +496,34 @@ mod tests {
         assert_eq!(entries.len(), HISTORY_LIMIT);
         assert_eq!(entries[0].last_played_unix, HISTORY_LIMIT as u64 + 25);
     }
+
+    /// Reads this machine's Steam files read-only. Prints what it found so the
+    /// session report can quote real data; skips politely when Steam is absent.
+    #[test]
+    fn real_machine_recent_smoke() {
+        if detect_steam_root().is_none() {
+            eprintln!("[kudos] no Steam install on this machine; skipping");
+            return;
+        }
+        let state = AppState::new();
+        let recent = recent_games(&state, 12);
+        let printable: Vec<String> = recent
+            .iter()
+            .map(|entry| {
+                format!(
+                    "{} ({}, {:?})",
+                    entry.id, entry.last_played_unix, entry.source
+                )
+            })
+            .collect();
+        eprintln!(
+            "[kudos] recent from this machine ({}): {}",
+            recent.len(),
+            printable.join(", ")
+        );
+        for entry in &recent {
+            assert!(entry.id.contains(':'), "id must stay namespaced");
+            assert!(entry.last_played_unix > 0);
+        }
+    }
 }
