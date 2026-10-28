@@ -41,8 +41,10 @@ jobs:
 
       - name: Verify tag matches the app version
         shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:TAG_NAME
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
           $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           if ($pkg.version -ne $tauri.version) {
