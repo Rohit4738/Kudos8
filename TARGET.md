@@ -118,6 +118,10 @@ Sources are registered once in `src-tauri/src/state.rs` (`AppState::new`). Front
 | `get_steam_status` | `() -> SteamStatus` | `{ installed, running, steamPath? }` | Steam client detection. |
 | `get_achievements` | `(game_id: String) -> AchievementSummary` | `{ supported, unlocked, total, reason? }` | **Additive (Session F, §3.5).** Local Steam achievement counts only. Never rejects, never touches the network, never blocks `list_games`. |
 | `get_recent_games` | `(limit: u32) -> Vec<RecentGame>` | `{ id, lastPlayedUnix, source }[]` | **Additive (Session G, §3.6).** Steam `LastPlayed` merged with Kudos' launch journal, filtered to the current library, newest first. Never rejects; an empty list hides the row. |
+| `get_steam_owned_games` | `() -> Vec<Game>` | uninstalled Steam catalog | **Additive (Session H, §15).** Owned-but-uninstalled apps from the active account's `localconfig.vdf`; local-only, never rejects, no network. Merge with `list_games`; installed ids are omitted. |
+| `get_steam_playtime` | `() -> Vec<SteamPlaytime>` | `{ appId, minutes, twoWeeksMinutes, lastPlayed? }[]` | **Additive (Session H, §15).** Local Steam playtime, sorted by minutes desc. Never rejects, no network. |
+| `get_steam_sync_status` | `() -> SteamSyncStatus` | `{ cached, appCount, fetchedAt?, ownedAppCount }` | **Additive (Session H, §15).** Reads only the local name cache; never rejects, no network. |
+| `sync_steam_metadata` | `() -> Result<SteamSyncStatus, String>` | status or a human-readable error string | **Additive (Session H, §15).** The only Session H network call; user-triggered only, never at startup. Async; failure leaves the cache unchanged. |
 
 From JS always go through `src/lib/api.ts`:
 
@@ -304,6 +308,12 @@ Update **your** row(s) after every milestone; add technical findings/blockers to
 | G6 | App integration: Home row/watcher, App host, detail mirror | G | DONE | Home imports `RecentlyPlayedRow` above the rail and arms the idle watcher in `onMount` (cleanup on leave); App mounts `<IdleHost />`; GameDetail mirrors a successful real launch via `recordLaunch`. Home spacing/rail padding tuned so the full 1600×1000 page is exactly 1000 px with no content clipped. No changes to `Game`/`LibrarySource` or existing command args. |
 | G7 | Dev harness + visual smoke | G | DONE | `?idle=1` lazily mounts `IdleHarness.svelte` from `main.ts` (normal bundle unaffected); `?idle=1&mock=1` opens ambient, `?idle=1&mock=1&shell=1` shows row + settings. Headless Chrome at 1600×1000: integrated home, settings card, preview overlay, 30 s auto-start, mid-crossfade (2 layers), 0 console errors/exceptions. Screenshots `sessionG-*` in `%TEMP%\opencode\kudos-shots`. |
 | G8 | Final gates, docs, push | G | DONE | `npm run check` 0 errors/0 warnings; `npm run rust:check` clean; `npm run rust:test` **52 unit + 3 registry, 0 failed**; `npm run build` **143.52 KB JS / 48.20 KB gzip** (CSS 50.18 / 9.81 KB); `npm run tauri build` green (`kudos.exe` + `Kudos_0.1.0_x64-setup.exe`, 1.40 MiB). TARGET.md §3.6/§14 added; committed with `Session G:` subjects and pushed to `origin main`. |
+| H1 | Steam owned catalog from `localconfig.vdf` | H | DONE | New `src-tauri/src/steam_owned.rs`. Parses the active account's `Apps` table (`Playtime`, `Playtime2wks`, `LastPlayed`), cached by `(path,len,mtime)`; excludes installed ids, 228980, Steam client 7 / Steam Cloud 760 and shortcut ids. `steam:<appid>`, `is_installed:false`, `launch_command:"steam://install/<appid>"`, cached title else `"Steam App <appid>"`, CDN cover only when named. Real machine: **114 uninstalled owned apps**; cold 26.8 ms / warm 4.6 ms (debug), no network, never panics. |
+| H2 | `get_steam_playtime` | H | DONE | Sorted by minutes desc then app id; camelCase wire `{appId, minutes, twoWeeksMinutes, lastPlayed}` with `lastPlayed` omitted when absent. Real machine: **119 rows, 95 with minutes, 395.0 total hours**; top five `steam:730` 2044, `steam:447040` 2039, `steam:298110` 1634, `steam:1687950` 1558, `steam:2698940` 1153 min. Includes 2 zero-minute Steam client/Cloud rows; owned/status count excludes them. |
+| H3 | Opt-in metadata sync + status | H | DONE | `sync_steam_metadata` GETs the frozen `ISteamApps/GetAppList/v2/` with a 10 s timeout and one retry; Valve retired the keyless endpoint (HTTP 404), so it falls back to keyless `IStoreBrowseService/GetItems/v1` in batches of 100. Only known ids are cached at **`%APPDATA%\Kudos\steam-apps.json`** as `{fetchedAt, apps}` via tmp+rename; never called at startup. Real run: `cached=true appCount=109 fetchedAt=1793176743 ownedAppCount=117`, 1.82 s. `get_steam_sync_status` is local-only. |
+| H4 | Command registration + install fallback | H | DONE | Registered the four additive commands in `lib.rs`/`commands.rs`; wrappers are sync except the async network sync. `launch_game` now opens `steam://install/<appid>` when an owned, uninstalled Steam id is not in `list_games`; the install is **not** journaled as a play. Unknown/non-Steam ids still return the normal error. No frontend files touched. |
+| H5 | Tests + committed fixture | H | DONE | 9 new tests (8 normal + 1 `#[ignore]` real-network sync) + `src-tauri/tests/fixtures/steam/localconfig-owned.vdf`. Covers quoted keys, shortcut/junk/duplicate-table filtering, installed/redistributable exclusion, atomic cache round-trip, app-list/store fallback parsing, exact camelCase JSON, and real-machine smoke (<100 ms warm). Full suite: **60 unit + 3 registry, 0 failed, 1 ignored**. |
+| H6 | Final gates, docs, push | H | DONE | `npm run check` 0 errors/0 warnings; `npm run rust:check` clean; `npm run rust:test` 60+3 pass; `npm run build` green; `npm run tauri build` green (`kudos.exe` + `Kudos_0.1.0_x64-setup.exe`, 1.43 MiB). TARGET.md §3.3/§15 added; committed with `Session H:` subjects and pushed to `origin main`. |
 
 > **Session F file-ownership note (approved by the user's task):** F edits `src-tauri/src/sources/steam.rs`
 > only to expose two existing helpers (`detect_steam_root`, `active_userdata_dir`) as `pub(crate)`, and
@@ -318,6 +328,14 @@ Update **your** row(s) after every milestone; add technical findings/blockers to
 > preview) and `GameDetail.svelte` (local recent mirror). `sources/steam.rs` changes are visibility-only
 > (`pub(crate)` on seven existing helpers). No frozen shape changed; the only contract addition is
 > `get_recent_games` in §3.6.
+
+> **Session H file-ownership note (approved by the user's task):** H edits Session A's
+> `src-tauri/src/commands.rs` (four additive command wrappers + install fallback in `launch_game`)
+> and `src-tauri/src/lib.rs` (module + `invoke_handler` registration). `src-tauri/src/sources/steam.rs`
+> changes are visibility-only (`pub(crate)` on `REDISTRIBUTABLE_APPID` and `steam_cover_url`). All new
+> logic lives in `src-tauri/src/steam_owned.rs`. No `src/**` file, frozen `Game`/`LibrarySource`
+> shape or existing command argument changed; the only contract addition is the four commands in
+> §3.3/§15. No new Cargo or npm dependency.
 
 ---
 
@@ -584,3 +602,127 @@ addition (§3.6). No new npm or Cargo dependencies. Steam was left running throu
   journal after a launch; neither client is installed here.
 - The idle auto-start was verified in headless Chrome with focus emulation. A live Tauri
   window follows the same suspended-when-unfocused rule by design.
+
+---
+
+## 15. SESSION H — STEAM OWNED CATALOG + PLAYTIME
+
+Final pass: **2026-10-28**. Additive only: four commands in §3.3, no frozen shape change, no
+new npm or Cargo dependency, no `src/**` edit. Steam files are read-only and Steam was left
+running throughout.
+
+**Gates (all green):**
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | 0 errors, 0 warnings |
+| `npm run rust:check` | clean |
+| `npm run rust:test` | **60 unit + 3 registry, 0 failed, 1 ignored** (9 new Session H tests) |
+| `npm run build` | green; 178.13 KB JS / 58.09 KB gzip, 67.56 KB CSS / 12.35 KB gzip. The shared worktree also contained Session I's in-progress UI; Session H adds no frontend code. |
+| `npm run tauri build` | `kudos.exe` + `Kudos_0.1.0_x64-setup.exe` (1.43 MiB) |
+| Real owned/playtime smoke | **114 uninstalled apps**, **119 playtime rows**, **95 with minutes**, **395.0 total hours** |
+| Real opt-in sync | `cached=true appCount=109 fetchedAt=1793176743 ownedAppCount=117`, 1.82 s |
+
+**Commands** (registered in `lib.rs`, wrappers in `commands.rs`, all logic in `steam_owned.rs`):
+
+| Command | Signature | Notes |
+| --- | --- | --- |
+| `get_steam_owned_games` | `() -> Vec<Game>` | Owned-but-uninstalled catalog. Local-only, never rejects, no network. |
+| `get_steam_playtime` | `() -> Vec<SteamPlaytime>` | Local playtime, sorted by `minutes` desc then `appId`. Never rejects. |
+| `get_steam_sync_status` | `() -> SteamSyncStatus` | Reads only `%APPDATA%\Kudos\steam-apps.json`. Local-only. |
+| `sync_steam_metadata` | `() -> Result<SteamSyncStatus, String>` | Async; the only network call. User-triggered only, never at startup. |
+
+Exact wire shapes:
+
+```json
+{"id":"steam:447040","platform":"steam","title":"Watch_Dogs® 2","launchCommand":"steam://install/447040","isInstalled":false,"coverImage":"https://cdn.cloudflare.steamstatic.com/steam/apps/447040/library_600x900.jpg"}
+```
+
+```json
+{"appId":"steam:730","minutes":2044,"twoWeeksMinutes":845,"lastPlayed":1793162961}
+```
+
+```json
+{"cached":true,"appCount":109,"fetchedAt":1793176743,"ownedAppCount":117}
+```
+
+`lastPlayed` and `fetchedAt` are omitted when unknown. `Game` keeps its existing camelCase
+shape; `exePath` and `sizeBytes` are omitted for catalog entries.
+
+**Owned catalog rules.** The source is the active account's
+`userdata/<accountid>/config/localconfig.vdf` → `UserLocalConfigStore → Software → Valve →
+Steam → Apps`. Each numeric store id becomes `steam:<appid>` with
+`platform:"steam"`, `is_installed:false` and `launch_command:"steam://install/<appid>"`.
+Installed ids (already returned by `list_games`), 228980, Steam client 7, Steam Cloud 760
+and non-Steam shortcut ids (`>= 0x8000_0000`) are excluded. The title comes from the name
+cache; without a name it is `"Steam App <appid>"` and **no** cover is advertised. With a
+name, `coverImage` is the CDN `library_600x900.jpg`. The list is title-sorted
+case-insensitively. Parsing is cached by `(path, len, mtime)` and a corrupt/mid-write file
+yields an empty list rather than a panic.
+
+**Playtime.** Every numeric store id in `Apps` becomes
+`{appId, minutes, twoWeeksMinutes, lastPlayed?}`. On this machine that is 119 rows, 95 with
+non-zero minutes, 395.0 total hours. The two zero-minute Steam client/Cloud rows are included
+here but excluded from owned/status counts. Top five: `steam:730` Counter-Strike 2 2044 min,
+`steam:447040` Watch_Dogs® 2 2039, `steam:298110` Far Cry® 4 1634, `steam:1687950` Persona 5
+Royal 1558, `steam:2698940` The Crew Motorfest 1153.
+
+**Opt-in metadata sync.** The frozen primary is
+`GET https://api.steampowered.com/ISteamApps/GetAppList/v2/` with a 10 s timeout and one
+retry. Valve has retired the keyless form: this machine returns HTTP 404
+`Method 'GetAppList' not found in interface 'ISteamApps'` on both attempts. The fallback is
+the store's keyless `IStoreBrowseService/GetItems/v1` on the same host, batched 100 ids per
+request. Only ids in the local catalog are retained. The cache is
+`%APPDATA%\Kudos\steam-apps.json`:
+
+```json
+{ "fetchedAt": 1793176743, "apps": { "730": "Counter-Strike 2", "447040": "Watch_Dogs® 2" } }
+```
+
+It is written through `<file>.kudos-tmp` + rename; a failed sync leaves the previous cache
+untouched and returns a human-readable error string. `cached` means a non-empty name cache
+exists, `appCount` is its pair count, and `ownedAppCount` is the distinct non-game store ids
+known locally (installed included). Nothing calls sync during startup or `list_games`.
+
+**Install fallback.** `list_games` never includes catalog entries, so `find_game` cannot
+resolve them. `launch_game` therefore checks `steam_owned::install_command` after a failed
+lookup and opens `steam://install/<appid>` for an owned, uninstalled Steam id. This is an
+install action, not a play, and is deliberately **not** journaled in `recent.json`. Unknown
+ids and non-Steam ids still return the normal `Invalid` error.
+
+**Tests.** 9 new tests in `steam_owned.rs` plus the committed fixture
+`src-tauri/tests/fixtures/steam/localconfig-owned.vdf`:
+
+- `parses_playtime_two_weeks_and_last_played_from_quoted_keys`
+- `ignores_shortcuts_junk_and_the_second_apps_table`
+- `owned_games_exclude_installed_and_redistributables`
+- `name_cache_roundtrip_is_atomic_and_filters_junk`
+- `app_list_filter_keeps_only_known_non_empty_names`
+- `store_fallback_keeps_known_names_and_builds_batches`
+- `wire_shapes_are_camel_case`
+- `real_machine_owned_smoke` (read-only; asserts warm <100 ms)
+- `real_machine_metadata_sync_opt_in` (`#[ignore]`; the only network test)
+
+**Measured on this machine (debug build).** 114 uninstalled owned apps, 119 playtime rows,
+109 cached names; cold 26.8 ms, warm 4.6 ms for the owned catalog (earlier warm runs
+1.3–1.9 ms), both well under the 100 ms budget. Sync named 109 of 117 ids in 1.82 s.
+
+**Known limits.**
+
+- `GetAppList` v2 is retired by Valve. The keyless store fallback is not part of the frozen
+  endpoint contract and could change; if both paths fail, sync returns an error and the old
+  cache is kept. No Steam Web API key is used.
+- 8 of 117 ids are hidden/region-restricted in the store response, so they stay
+  `"Steam App <id>"` with no cover until a future sync names them.
+- The catalog is account-local and only as complete as `localconfig.vdf`. A fresh account,
+  family sharing, or a never-started Steam client yields `[]`, not an error. The 119 local
+  rows are not a claim about the entire Steam store.
+- Playtime includes 2 zero-minute Steam client/Cloud rows; owned/status counts exclude them.
+- Catalog entries are not in `list_games`, so the frontend must merge both lists. Installed
+  ids appear only once, from `list_games`.
+- Covers for uninstalled named apps are CDN URLs (no local `librarycache` lookup); unnamed
+  apps get no cover and rely on the gradient fallback.
+- Sync is manual with no TTL or background refresh. `steam://install` opens Steam's install
+  flow and depends on the OS protocol handler; it does not verify or wait for the install.
+- Windows-only, like the rest of the app: WinHTTP via FFI, `%APPDATA%` and Steam's registry
+  detection.
