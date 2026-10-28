@@ -117,6 +117,7 @@ Sources are registered once in `src-tauri/src/state.rs` (`AppState::new`). Front
 | `add_to_steam` | `(game_id: String) -> SourceResult<()>` | `null` or error string | Creates a non-Steam shortcut via Steam. |
 | `get_steam_status` | `() -> SteamStatus` | `{ installed, running, steamPath? }` | Steam client detection. |
 | `get_achievements` | `(game_id: String) -> AchievementSummary` | `{ supported, unlocked, total, reason? }` | **Additive (Session F, §3.5).** Local Steam achievement counts only. Never rejects, never touches the network, never blocks `list_games`. |
+| `get_recent_games` | `(limit: u32) -> Vec<RecentGame>` | `{ id, lastPlayedUnix, source }[]` | **Additive (Session G, §3.6).** Steam `LastPlayed` merged with Kudos' launch journal, filtered to the current library, newest first. Never rejects; an empty list hides the row. |
 
 From JS always go through `src/lib/api.ts`:
 
@@ -159,6 +160,31 @@ Wire format (camelCase, `None` omitted):
 `UserGameStatsSchema_<appid>.bin` for achievement totals). There is no Steam Web API,
 API key, or network request. The command returns `supported:false` (never an error)
 for Epic/GOG ids, missing Steam profiles, missing files, or any parse doubt.
+
+### 3.6 `RecentGame` — additive contract (Session G)
+
+Rust: `src-tauri/src/steam_recent.rs` · TypeScript: `src/lib/recent.ts`
+
+```rust
+pub struct RecentGame {
+    pub id: String,             // "<platform>:<store-id>"
+    pub last_played_unix: u64,  // Unix seconds
+    pub source: RecentSource,   // "steam" | "kudos"
+}
+```
+
+Wire format (camelCase):
+
+```json
+{ "id": "steam:730", "lastPlayedUnix": 1792855921, "source": "steam" }
+```
+
+`get_recent_games(limit)` merges Steam's per-account `LastPlayed` from
+`userdata/<accountid>/config/localconfig.vdf` with Kudos' own launch journal
+(`%APPDATA%\Kudos\recent.json`, capped at 100 entries, atomic replace). Steam wins
+for the same id; both lists are filtered to ids in the current library and ordered
+newest first. `limit` is clamped to `1..=50`. The command never rejects. `Game`,
+`Platform`, `LibrarySource` and every pre-existing command signature stay unchanged.
 
 ---
 
@@ -270,12 +296,28 @@ Update **your** row(s) after every milestone; add technical findings/blockers to
 | F6 | Achievements UI on GameDetail | F | DONE | Steam: “Achievements — n / total unlocked” + subtle progress bar (mock: **18/45, 40%**); Epic/GOG: “Achievements not available for this platform”; Steam `supported:false`: renders nothing (no toast, no error card). Local read runs after paint and never blocks the library. Evidence: `f-detail-steam` (Cyberpunk 2077), `f-detail-epic`, `f-detail-gog`; 0 console errors. |
 | F7 | Achievement parser tests + committed fixtures | F | DONE | 9 achievement tests + 5 committed binaries under `src-tauri/tests/fixtures/achievements/` (`schema-424242`, `stats-424242`, `stats-empty`, `stats-corrupt`, `stats-wrong-magic`). Covers totals, bitfield/**AchievementTimes** unlocked counts, absent file, wrong magic/case, trailing END markers, schema appid mismatch and cache invalidation. Full suite: **52 unit + 3 registry integration, 0 failed**; real-machine smoke output recorded in §13. |
 | F8 | Final gates, visual smoke, documentation, push | F | DONE | `npm run check` 0/0; `npm run rust:check` clean; `npm run rust:test` 52+3 pass; `npm run build` **124.75 KB JS / 42.19 KB gzip** (CSS 39.52 / 8.12 KB); `npm run tauri build` green (exe + `Kudos_0.1.0_x64-setup.exe`, 1.40 MiB). Headless Chrome 1600×1000 with `?mock=1` + `?pad=` preview modes: 13 screenshots in `%TEMP%\opencode\kudos-shots`, 0 console errors. Committed with `Session F:` subjects and pushed to `origin main`. |
+| G1 | Idle/ambient state: prefs, activity watcher, gate | G | DONE | New `src/lib/idle.svelte.ts`. Prefs at **`kudos.idle`** (enabled, 30 s/1 m/2 m/5 m/Never, art source, crossfade, clock); pointer/keyboard/wheel/touch plus 2 Hz gamepad activity only reschedules one timeout; pauses while hidden/unfocused; reference-counted `armIdleWatcher`; `setIdleGate` refuses an empty library. Settings preview forces entry but still respects the gate. Evidence: a seeded 30 s delay auto-started on Control Ultimate Edition with two layers mid-crossfade, 0 console errors. |
+| G2 | PS5-style ambient screen | G | DONE | New `IdleAmbient.svelte`. Full-bleed art with two-layer crossfade (15 s/2 s slow, 8 s/1 s fast), transform-only Ken Burns drift, clock/date, platform + title + relative play time, input/gamepad exits after an 800 ms grace period, body scroll locked, reduced motion keeps opacity-only. Steam `library_hero.jpg` with local 600×900 fallback; GOG `.ico` skipped for gradients. Evidence: `sessionG-idle-1600x1000.png`, `sessionG-idle-crossfade-1600x1000.png`. |
+| G3 | Recently Played backend: Steam LastPlayed + Kudos journal | G | DONE | New `steam_recent.rs` parses `localconfig.vdf` `apps/<appid>/LastPlayed` (cached by mtime+len), merges with `%APPDATA%\Kudos\recent.json` (cap 100, atomic replace), filters to the current library, clamps limit to 1..=50. `launch_game` journals only successful launches, best-effort. Reuses B's `detect_steam_root`/`active_userdata_dir` via visibility-only edits. 8 tests incl. real-machine smoke; real data `steam:730` (1793157398), `steam:12150` (1793116823), `steam:413150` (1792425299). |
+| G4 | Recently Played row + local preview mirror | G | DONE | New `recent.ts`, `history.svelte.ts`, `RecentlyPlayedRow.svelte`. Backend list is authoritative; `localStorage` **`kudos.recentLaunches`** mirrors launches for an instant update before the next round-trip and for plain-browser previews. Steam wins per id; unknown/uninstalled ids are skipped; the row hides when empty. Six mock entries and ten rail tiles at 1600×1000; empty-library safe. |
+| G5 | Idle settings card + preview | G | DONE | New `IdleSettings.svelte` (controlled) mounted in Settings: enable toggle, delay, art source, crossfade, clock, Reset, “Preview idle mode now”. Preview calls `enterIdle(true)` after `loadLibrary`; it bypasses enabled/delay but still refuses an empty library with friendly copy. Values live in `kudos.idle` and survive reload. Evidence: `sessionG-integrated-settings-idle-1600x1000.png`. |
+| G6 | App integration: Home row/watcher, App host, detail mirror | G | DONE | Home imports `RecentlyPlayedRow` above the rail and arms the idle watcher in `onMount` (cleanup on leave); App mounts `<IdleHost />`; GameDetail mirrors a successful real launch via `recordLaunch`. Home spacing/rail padding tuned so the full 1600×1000 page is exactly 1000 px with no content clipped. No changes to `Game`/`LibrarySource` or existing command args. |
+| G7 | Dev harness + visual smoke | G | DONE | `?idle=1` lazily mounts `IdleHarness.svelte` from `main.ts` (normal bundle unaffected); `?idle=1&mock=1` opens ambient, `?idle=1&mock=1&shell=1` shows row + settings. Headless Chrome at 1600×1000: integrated home, settings card, preview overlay, 30 s auto-start, mid-crossfade (2 layers), 0 console errors/exceptions. Screenshots `sessionG-*` in `%TEMP%\opencode\kudos-shots`. |
+| G8 | Final gates, docs, push | G | DONE | `npm run check` 0 errors/0 warnings; `npm run rust:check` clean; `npm run rust:test` **52 unit + 3 registry, 0 failed**; `npm run build` **143.52 KB JS / 48.20 KB gzip** (CSS 50.18 / 9.81 KB); `npm run tauri build` green (`kudos.exe` + `Kudos_0.1.0_x64-setup.exe`, 1.40 MiB). TARGET.md §3.6/§14 added; committed with `Session G:` subjects and pushed to `origin main`. |
 
 > **Session F file-ownership note (approved by the user's task):** F edits `src-tauri/src/sources/steam.rs`
 > only to expose two existing helpers (`detect_steam_root`, `active_userdata_dir`) as `pub(crate)`, and
 > edits Session D's UI files (`Home`, `GameDetail`, `Settings`, `gamepad.ts`, `theme.ts`, `windowPrefs.ts`,
 > `library.svelte.ts`, `App.svelte`) for the three requested features. No frozen shape changes; the only
 > contract addition is `get_achievements` in §3.5.
+
+> **Session G file-ownership note (approved by the user's task):** G edits Session A's `src/main.ts`
+> (lazy `?idle=1` harness import only), `src/lib/api.ts` (additive `getRecentGames` wrapper),
+> `commands.rs`/`lib.rs` (additive command + launch journal hook) and Session D's `Home.svelte`
+> (recent row + idle arming + spacing), `App.svelte` (`<IdleHost />`), `Settings.svelte` (idle card +
+> preview) and `GameDetail.svelte` (local recent mirror). `sources/steam.rs` changes are visibility-only
+> (`pub(crate)` on seven existing helpers). No frozen shape changed; the only contract addition is
+> `get_recent_games` in §3.6.
 
 ---
 
@@ -474,3 +516,71 @@ addition (§3.5). No new npm or Cargo dependencies.
   by both files' `mtime` + length), not pushed while Steam writes. A title with no local stats or
   schema legitimately shows `supported:false`.
 - Steam stayed running for the whole pass, so the E6 live Add-to-Steam write remains blocked (§11).
+
+---
+
+## 14. SESSION G — IDLE MODE + RECENTLY PLAYED
+
+Final pass: **2026-10-28**. All work is additive; `get_recent_games` is the only contract
+addition (§3.6). No new npm or Cargo dependencies. Steam was left running throughout.
+
+**Gates (all green):**
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | 0 errors, 0 warnings |
+| `npm run rust:check` | clean |
+| `npm run rust:test` | **52 unit + 3 registry, 0 failed** (8 recent tests) |
+| `npm run build` | **143.52 KB JS / 48.20 KB gzip**; 50.18 KB CSS / 9.81 KB gzip |
+| `npm run tauri build` | `kudos.exe` + `Kudos_0.1.0_x64-setup.exe` (1.40 MiB) |
+| Real recent smoke | `steam:730`, `steam:12150`, `steam:413150` from this machine |
+
+**What was built:**
+
+- **Idle engine** (`idle.svelte.ts`): opt-in ambient mode after 30 s / 1 m / 2 m / 5 m /
+  Never. One timer, reset by real input (pointer, keyboard, wheel, touch, 2 Hz gamepad
+  poll); paused while the window is hidden or unfocused, so alt-tabbing never opens the
+  screen behind another app. The gate refuses an empty library and retries later.
+- **Ambient screen** (`IdleAmbient.svelte`): PS5-style full-bleed art, two-layer
+  crossfade, slow transform-only drift, clock/date, platform badge, title and relative
+  play time. Any input exits after an 800 ms grace period; body scroll is locked and
+  focus/scroll are restored. `prefers-reduced-motion` removes the pan/zoom but keeps the
+  fade. Steam uses `library_hero.jpg` with the local portrait cover as fallback.
+- **Recent backend** (`steam_recent.rs`): parses Steam's per-account `LastPlayed` from
+  `localconfig.vdf`, merges it with Kudos' own launch journal
+  (`%APPDATA%\Kudos\recent.json`, capped at 100, atomic replace), filters to the current
+  library and clamps the request to 1..=50. `launch_game` appends only after a successful
+  launch. Steam wins over the journal for the same id.
+- **Recent row** (`RecentlyPlayedRow.svelte`): compact art strip above the Home rail,
+  resolving ids against the live library and hiding itself when there is nothing recent.
+  A `localStorage` mirror (`kudos.recentLaunches`) updates the row instantly after a launch
+  and keeps plain-browser previews useful; the backend result always wins in the desktop app.
+- **Settings** (`IdleSettings.svelte`): enable, delay, art source, crossfade, clock, Reset
+  and **Preview idle mode now**. Preview bypasses the enabled/delay check but still needs a
+  game; an empty library shows friendly copy instead of a blank overlay.
+- **Dev harness**: `?idle=1` lazily mounts `IdleHarness.svelte` from `main.ts`, so the
+  normal bundle is unchanged. `?idle=1&mock=1` opens ambient; `&shell=1` shows the row and
+  settings card.
+
+**Visual smoke:** headless Chrome at 1600×1000 against the integrated app (`?mock=1`),
+**0 console errors / exceptions**. Screenshots in `%TEMP%\opencode\kudos-shots`:
+
+- `sessionG-integrated-home-1600x1000.png` — six recent entries, ten rail tiles, footer
+  hints visible; the whole page is exactly 1000 px (no scroll).
+- `sessionG-integrated-settings-idle-1600x1000.png` — idle card in the Settings grid.
+- `sessionG-integrated-idle-1600x1000.png` — preview from Settings, art + clock + meta.
+- `sessionG-idle-autostart-1600x1000.png` — seeded 30 s delay fired on its own; two layers
+  mid-crossfade, `body { overflow: hidden }`.
+- `sessionG-idle-1600x1000.png`, `sessionG-idle-crossfade-1600x1000.png`,
+  `sessionG-shell-1600x1000.png` — harness ambient, crossfade and shell modes.
+
+**Not verified on this machine:**
+
+- No physical controller was available for the ambient wake path (400 ms gamepad poll);
+  keyboard/pointer exit and the Settings preview were exercised.
+- Long-duration burn-in and display sleep were not tested. Idle mode is explicitly not a
+  screensaver: it keeps the window awake and does not blank or lock the screen.
+- Epic/GOG have no local play history, so their recent timestamps come from Kudos'
+  journal after a launch; neither client is installed here.
+- The idle auto-start was verified in headless Chrome with focus emulation. A live Tauri
+  window follows the same suspended-when-unfocused rule by design.
