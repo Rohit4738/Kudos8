@@ -111,7 +111,7 @@
   }
 
   .tile {
-    --recent-w: clamp(72px, 9.5vh, 96px);
+    --recent-w: clamp(64px, 8vh, 84px);
     flex: 0 0 auto;
     width: var(--recent-w);
     display: flex;

@@ -16,6 +16,7 @@
     loadLibrary,
     sortGames,
   } from "../lib/library.svelte";
+  import { armIdleWatcher } from "../lib/idle.svelte";
   import { navigate } from "../lib/router.svelte";
   import { applyStoredAccent, readCrossfade, storedBackground } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
@@ -27,6 +28,7 @@
   import GameTile from "../lib/components/GameTile.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import InfoPanel from "../lib/components/InfoPanel.svelte";
+  import RecentlyPlayedRow from "../lib/components/RecentlyPlayedRow.svelte";
   import Toaster from "../lib/components/Toaster.svelte";
 
   interface Ambient {
@@ -152,10 +154,12 @@
     if (viewport) observer.observe(viewport);
 
     const stopGamepad = onGamepad(handlePad);
+    const stopIdle = armIdleWatcher();
 
     return () => {
       observer.disconnect();
       stopGamepad();
+      stopIdle();
       cancelAnimationFrame(resizeFrame);
       if (ambientTimer) clearTimeout(ambientTimer);
     };
@@ -363,6 +367,8 @@
     </div>
   </header>
 
+  <RecentlyPlayedRow games={library.games} onOpen={openGame} />
+
   <FilterBar value={filter} {counts} onChange={setFilter} />
 
   <div class="rail-viewport" bind:this={viewport}>
@@ -462,7 +468,7 @@
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    gap: clamp(14px, 2.2vh, 24px);
+    gap: clamp(10px, 1.4vh, 18px);
     isolation: isolate;
   }
 
@@ -600,8 +606,8 @@
     position: relative;
     display: flex;
     align-items: center;
-    min-height: calc(var(--tile-w) * 1.5 + 64px);
-    padding-block: 30px;
+    min-height: calc(var(--tile-w) * 1.5 + 36px);
+    padding-block: 16px;
     overflow: hidden;
   }
 

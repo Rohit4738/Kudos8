@@ -6,6 +6,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { addToSteam, getAchievements, launchGame } from "../lib/api";
+  import { recordLaunch } from "../lib/history.svelte";
   import { coverSource, placeholderBackground } from "../lib/art";
   import {
     formatBytes,
@@ -143,6 +144,8 @@
         await wait(1500);
       } else {
         await launchGame(game.id);
+        // Mirror the backend journal locally so the recent row moves immediately.
+        recordLaunch(game.id);
       }
     } catch (error) {
       failure = humanError(error);

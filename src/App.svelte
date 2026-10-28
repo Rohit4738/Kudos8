@@ -12,6 +12,7 @@
   import Home from "./pages/Home.svelte";
   import GameDetail from "./pages/GameDetail.svelte";
   import Settings from "./pages/Settings.svelte";
+  import IdleHost from "./lib/components/IdleHost.svelte";
 
   const pageKey = $derived(
     router.route.name === "game" ? `game:${router.route.id}` : router.route.name,
@@ -92,6 +93,8 @@
     {/key}
   </main>
 </div>
+
+<IdleHost />
 
 <style>
   .shell {

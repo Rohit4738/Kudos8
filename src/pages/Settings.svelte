@@ -50,6 +50,7 @@
     type DensityMode,
   } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
+  import { enterIdle, idlePrefs, updateIdlePrefs } from "../lib/idle.svelte";
   import {
     currentFullscreen,
     isTauriRuntime,
@@ -61,6 +62,7 @@
   } from "../lib/windowPrefs";
   import type { SteamStatus } from "../lib/types";
   import Icon from "../lib/components/Icon.svelte";
+  import IdleSettingsCard from "../lib/components/IdleSettings.svelte";
   import PadGlyph from "../lib/components/PadGlyph.svelte";
   import Spinner from "../lib/components/Spinner.svelte";
   import Toaster from "../lib/components/Toaster.svelte";
@@ -171,6 +173,17 @@
 
   function choosePad(value: PadOverride): void {
     setPadOverride(value);
+  }
+
+  async function previewIdle(): Promise<void> {
+    if (library.status === "idle") await loadLibrary();
+    if (!enterIdle(true)) {
+      pushToast(
+        "info",
+        "Add a game first",
+        "Idle mode needs at least one game in your library before it can start.",
+      );
+    }
   }
 
   async function loadSteam(): Promise<void> {
@@ -372,6 +385,12 @@
         </button>
       </div>
     </section>
+
+    <IdleSettingsCard
+      value={idlePrefs}
+      onChange={(next) => updateIdlePrefs(next)}
+      onPreview={() => void previewIdle()}
+    />
 
     <section class="card controller-card">
       <div class="card-head">
