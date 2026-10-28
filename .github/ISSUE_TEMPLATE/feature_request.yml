@@ -1,0 +1,76 @@
+name: Feature request
+description: Suggest an improvement or a new capability for Kudos.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Kudos is deliberately small and local-first. Before
+        proposing a feature, check the non-goals in `TARGET.md`: game downloads,
+        store browsing, accounts, cloud sync and social features are out of scope.
+
+        The most useful requests describe the problem first, not only the solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation and why the current behavior is not enough.
+      placeholder: |
+        When I ...
+        I have to ...
+        This is annoying because ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like Kudos to do? Mockups or sketches are welcome.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Library sources (Steam / Epic / GOG / new store)
+        - Home and library UI
+        - Controller and keyboard navigation
+        - Steam integration (shortcuts, playtime, achievements)
+        - Performance and memory
+        - Packaging, installer and updates
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve the problem, including workarounds you use today.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links, or examples from other launchers. Do not include personal information.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true
+        - label: This request fits the project's non-goals (no downloads, store browsing, accounts, cloud sync or social features).
+          required: true
+        - label: I am willing to help test this change if a build is available.
+          required: false

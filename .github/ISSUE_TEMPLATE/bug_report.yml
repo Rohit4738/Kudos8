@@ -1,0 +1,138 @@
+name: Bug report
+description: Something in Kudos is broken, crashes, or behaves unexpectedly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search the existing
+        issues first, and remove personal information (account names, Steam IDs,
+        file paths with your real name) before posting.
+
+        Kudos is a local Windows app: it has no telemetry and no server-side logs.
+        The details below are often the only way to reproduce the problem.
+
+  - type: input
+    id: version
+    attributes:
+      label: Kudos version
+      description: Settings → About, or the installer filename (for example `Kudos_0.1.0_x64-setup.exe`).
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: How did you install Kudos?
+      options:
+        - NSIS installer (per-user install)
+        - Portable exe (`kudos.exe`)
+        - Built from source (`npm run tauri build`)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run `winver` and paste the full version and build number.
+      placeholder: "Windows 11 23H2, build 22631.4169"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: stores
+    attributes:
+      label: Store clients installed on this PC
+      description: Select every store client present, even if the bug is not about that store.
+      options:
+        - label: Steam
+        - label: Epic Games Launcher
+        - label: GOG Galaxy
+        - label: None of these
+        - label: Other (describe below)
+
+  - type: dropdown
+    id: controller
+    attributes:
+      label: Controller in use
+      description: Pick the closest match. Choose "Keyboard and mouse only" if no pad is connected.
+      options:
+        - Xbox controller (XInput)
+        - PlayStation controller (DualSense / DualShock)
+        - Nintendo controller (Switch Pro / Joy-Con)
+        - Generic / third-party controller
+        - Keyboard and mouse only
+        - No controller connected
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Be as specific as possible. Include the game and store if the bug is library-related.
+      placeholder: |
+        1. Open Kudos.
+        2. Select the Steam filter.
+        3. Press Play on ...
+        4. See ...
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact error text or toast if one appeared.
+      placeholder: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or screen recording
+      description: |
+        Drag images or a short video here. A screenshot of the whole Kudos window
+        is more useful than a cropped region. For visual bugs, include one
+        screenshot before and one after the action if you can. If the app will
+        not start, a photo of the error is enough.
+      placeholder: "Drop screenshots here..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: |
+        Anything else that might matter: whether Steam/Epic/GOG was running,
+        whether the library was synced, a freshly installed game, an unusual
+        install path, or steps you already tried.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true
+        - label: The list of installed store clients above is accurate for this PC.
+          required: true
+        - label: I removed account names, Steam IDs, and other personal information from screenshots and logs.
+          required: true
