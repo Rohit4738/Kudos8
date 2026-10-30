@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#08080c" />
+    <title>Kudos — your PC games, one beautiful library</title>
+    <meta
+      name="description"
+      content="Kudos is a free, local-first Windows launcher that brings Steam, Epic and GOG together in one controller-first, PS5-style library. No account. No telemetry."
+    />
+    <link rel="icon" href="images/kudos-mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="#top" aria-label="Kudos home">
+          <img src="images/kudos-mark.svg" width="36" height="36" alt="Kudos logo" />
+          <span>Kudos</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#gallery">Gallery</a>
+          <a href="#download">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>Windows 10/11 · local-first</p>
+          <h1 id="hero-title">Your PC games.<br /><span>One beautiful library.</span></h1>
+          <p class="lede">
+            Kudos brings Steam, Epic and GOG together in a controller-first, PS5-style launcher.
+            No account. No telemetry. Just the games you already own.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/Rohit4738/Kudos8/releases/latest">
+              Download for Windows
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="M4 10h11M11 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </a>
+            <a class="button button-ghost" href="#gallery">See it in action</a>
+          </div>
+          <p class="hero-meta">v0.1.0 · Windows installer · Unsigned build</p>
+        </div>
+
+        <div class="hero-visual">
+          <div class="hero-glow" aria-hidden="true"></div>
+          <figure class="hero-frame">
+            <img
+              src="images/library-hero.jpg"
+              width="1280"
+              height="800"
+              alt="Kudos home screen with a large Cyberpunk 2077 hero, store filters and a row of game covers."
+              fetchpriority="high"
+            />
+            <figcaption class="hero-caption">
+              <span class="hero-caption-kicker">Continue playing</span>
+              <span class="hero-caption-title">Pick up exactly where you left off.</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section wrap" id="features" aria-labelledby="features-title">
+        <div class="section-head">
+          <p class="eyebrow">Built for the couch</p>
+          <h2 id="features-title">Everything you need to press play.</h2>
+          <p class="section-lede">
+            A quiet, fast shell around the store clients you already use. Keyboard and controller
+            welcome; mouse optional.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h4l2 2h5A2.5 2.5 0 0 1 20 9.5v7A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                <path d="M8 12h4M10 10v4M16 12h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </span>
+            <h3>One unified library</h3>
+            <p>
+              Steam, Epic and GOG in one PS5-style home. Installed games, owned Steam titles,
+              playtime, search and favorites live in the same place.
+            </p>
+            <span class="feature-note">Optional, in development: complete owned library via Steam Web API.</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M7.5 8.5h9a4.5 4.5 0 0 1 4.4 5.4l-.5 2.6a2.2 2.2 0 0 1-3.7 1.1l-1.6-1.4H8.9l-1.6 1.4a2.2 2.2 0 0 1-3.7-1.1l-.5-2.6a4.5 4.5 0 0 1 4.4-5.4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                <path d="M8 12v2M7 13h2M16.5 12.4h.01M18.2 14h.01" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+              </svg>
+            </span>
+            <h3>Controller glyphs that match</h3>
+            <p>
+              Xbox, PlayStation and Nintendo layouts, with automatic detection and a manual override.
+              Navigate rows, cycle filters, open the side rail and launch a game without touching the
+              keyboard.
+            </p>
+            <span class="feature-note">Keyboard and mouse always work too.</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M12 7.5V12l3 1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <h3>Idle ambient mode</h3>
+            <p>
+              Leave the library alone and Kudos turns into a calm full-screen display: hero art,
+              clock and a gentle crossfade. On by default after one minute.
+            </p>
+            <span class="feature-note">Pauses when unfocused. Any input returns to the library.</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect x="4" y="5" width="16" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="m5.5 16 4.2-4.6 3 3 2.1-2.2 3.7 3.8M8.2 9.2h.01" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <h3>Artwork, your way</h3>
+            <p>
+              Optional SteamGridDB art for GOG and non-Steam games. Pick a grid, hero, logo or icon;
+              Kudos caches it and writes it into Steam's grid folder for the shortcut.
+            </p>
+            <span class="feature-note">In development: needs a SteamGridDB key and a non-Steam shortcut.</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="section wrap" id="gallery" aria-labelledby="gallery-title">
+        <div class="section-head">
+          <p class="eyebrow">A closer look</p>
+          <h2 id="gallery-title">Made to feel at home on a big screen.</h2>
+          <p class="section-lede">
+            Rows, owned titles, install actions and an ambient mode that gets out of the way.
+          </p>
+        </div>
+
+        <div class="gallery-grid">
+          <figure class="shot shot-rows">
+            <div class="shot-image">
+              <img
+                src="images/library-rows.jpg"
+                width="800"
+                height="1100"
+                decoding="async"
+                alt="Kudos library with Continue playing, Recently played, Your library and In your Steam account rows."
+              />
+            </div>
+            <figcaption>
+              <strong>Rows that keep going</strong>
+              <span>Continue playing, recent sessions, your full library and owned Steam titles.</span>
+            </figcaption>
+          </figure>
+
+          <figure class="shot">
+            <div class="shot-image">
+              <img
+                src="images/idle-mode.jpg"
+                width="1000"
+                height="625"
+                decoding="async"
+                alt="Kudos idle ambient screen showing Cyberpunk 2077 art, the title and a large clock."
+              />
+            </div>
+            <figcaption>
+              <strong>Idle ambient mode</strong>
+              <span>Hero art, clock and a quiet crossfade after one minute.</span>
+            </figcaption>
+          </figure>
+
+          <figure class="shot">
+            <div class="shot-image">
+              <img
+                src="images/detail-owned.jpg"
+                width="1000"
+                height="625"
+                decoding="async"
+                alt="Baldur's Gate 3 detail page in Kudos, marked In Library — not downloaded, with an Install button."
+              />
+            </div>
+            <figcaption>
+              <strong>Owned but not installed</strong>
+              <span>Install through Steam without leaving the detail page.</span>
+            </figcaption>
+          </figure>
+
+          <figure class="shot">
+            <div class="shot-image">
+              <img
+                src="images/detail-add-to-steam.jpg"
+                width="1000"
+                height="625"
+                decoding="async"
+                alt="Disco Elysium detail page in Kudos with Play, Favorite, Add to Steam and Hide actions."
+              />
+            </div>
+            <figcaption>
+              <strong>Add non-Steam games</strong>
+              <span>A standard shortcut, with a backup and no duplicates.</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section wrap" id="download" aria-labelledby="download-title">
+        <div class="download-card">
+          <p class="eyebrow">Ready when you are</p>
+          <h2 id="download-title">Bring your library to the living room.</h2>
+          <p>
+            Download the latest Windows build from GitHub Releases. Free, local-first and built with
+            Tauri, Rust and Svelte.
+          </p>
+          <a class="button button-primary button-large" href="https://github.com/Rohit4738/Kudos8/releases/latest">
+            Download for Windows
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M4 10h11M11 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </a>
+          <p class="download-meta">Windows 10/11 x64 · NSIS installer · Unsigned, so SmartScreen may ask for confirmation.</p>
+        </div>
+      </section>
+
+      <section class="section wrap limits" id="limitations" aria-labelledby="limits-title">
+        <div class="section-head">
+          <p class="eyebrow">Honest by default</p>
+          <h2 id="limits-title">Known limitations.</h2>
+          <p class="section-lede">
+            Kudos is deliberately small. These are the edges worth knowing before you download.
+          </p>
+        </div>
+
+        <ol class="limits-grid">
+          <li>
+            <h3>Epic and GOG are fixture-tested only</h3>
+            <p>
+              Both scanners have unit tests and committed fixtures, but neither client is installed
+              on the development machine. A real-client mismatch is a bug worth reporting.
+            </p>
+          </li>
+          <li>
+            <h3>The installer is unsigned</h3>
+            <p>
+              There is no code-signing certificate yet, so Windows SmartScreen may warn on first run.
+              Download only from the official GitHub releases page.
+            </p>
+          </li>
+          <li>
+            <h3>Achievements are Steam-only</h3>
+            <p>
+              Counts come from local Steam stats files. Epic and GOG titles show that achievements
+              are not available for their platform; no Web API or key is involved.
+            </p>
+          </li>
+        </ol>
+        <p class="limits-note">
+          Optional add-ons are never required. The Steam Web API and SteamGridDB cards are still in
+          development on main and may not be in the v0.1.0 installer. The core library works without
+          either.
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div class="footer-brand">
+          <a class="brand" href="#top" aria-label="Kudos home">
+            <img src="images/kudos-mark.svg" width="32" height="32" alt="Kudos logo" />
+            <span>Kudos</span>
+          </a>
+          <p>One library for the games you already own.</p>
+        </div>
+        <nav class="footer-nav" aria-label="Footer">
+          <a href="https://github.com/Rohit4738/Kudos8">GitHub repository</a>
+          <a href="https://github.com/Rohit4738/Kudos8/releases">Releases</a>
+          <a href="https://github.com/Rohit4738/Kudos8/issues">Report an issue</a>
+        </nav>
+        <p class="footer-meta">No tracking, no account, no CDN. Built for Windows.</p>
+      </div>
+    </footer>
+  </body>
+</html>
