@@ -24,6 +24,7 @@ import {
 } from "./devMock";
 import { humanError } from "./format";
 import { isTauriRuntime } from "./art";
+import { getSteamOwnedApiGames } from "./steamKey";
 import {
   mergeOwnedGames,
   toPlaytimeMap,
@@ -142,20 +143,26 @@ export function loadLibrary(force = false): Promise<void> {
 }
 
 /**
- * Best-effort enrichment from the three additive H commands. A missing command
- * (H not landed yet), a broken cache or an unreadable config all leave the
- * installed-only library intact and never surface a raw error.
+ * Best-effort enrichment from the additive Steam commands. The optional Web API
+ * list is the superset; Session H's localconfig catalogue fills any id the API
+ * did not return (for example when no key is configured). Installed games from
+ * `list_games` always win, so an id can never appear twice.
+ *
+ * A missing command (older build), a broken cache or an unreadable config all
+ * leave the installed-only library intact and never surface a raw error.
  */
 async function hydrateSteam(installed: Game[]): Promise<void> {
   if (!isTauriRuntime()) return;
 
-  const [ownedResult, playtimeResult, statusResult] = await Promise.allSettled([
+  const [ownedResult, playtimeResult, statusResult, apiResult] = await Promise.allSettled([
     getSteamOwnedGames(),
     getSteamPlaytime(),
     getSteamSyncStatus(),
+    getSteamOwnedApiGames(),
   ]);
 
   let owned: Game[] = [];
+  let apiOwned: Game[] = [];
 
   if (ownedResult.status === "fulfilled") {
     owned = ownedResult.value.map(normalize);
@@ -168,10 +175,22 @@ async function hydrateSteam(installed: Game[]): Promise<void> {
       : humanError(ownedResult.reason);
   }
 
-  if (owned.length > 0) {
+  if (apiResult.status === "fulfilled") {
+    apiOwned = apiResult.value.map(normalize);
+    if (apiOwned.length > 0) {
+      library.steamState = "ready";
+      library.steamError = null;
+    }
+  }
+
+  if (owned.length > 0 || apiOwned.length > 0) {
     // Rebuild from the installed snapshot so a forced refresh cannot duplicate
-    // or resurrect entries that the store no longer owns.
-    library.games = mergeOwnedGames(installed, owned).sort(byTitle);
+    // or resurrect entries that the store no longer owns. API first (superset),
+    // then localconfig for anything it missed; mergeOwnedGames de-dupes by id.
+    library.games = mergeOwnedGames(
+      mergeOwnedGames(installed, apiOwned),
+      owned,
+    ).sort(byTitle);
   }
 
   if (playtimeResult.status === "fulfilled") {
