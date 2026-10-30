@@ -347,6 +347,10 @@
     storeFilter(next);
     rowIndex = 0;
     colIndex = 0;
+    lastScrolledRow = -1;
+    document
+      .querySelector<HTMLElement>(".page")
+      ?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function cycleFilter(direction: 1 | -1): void {

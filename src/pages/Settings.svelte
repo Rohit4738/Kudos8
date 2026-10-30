@@ -1251,7 +1251,7 @@
     font-weight: 700;
     letter-spacing: -0.05em;
     color: #fff;
-    background: linear-gradient(145deg, var(--accent) 0%, #8b5cf6 100%);
+    background: linear-gradient(145deg, var(--accent) 0%, var(--accent-2, #8b5cf6) 100%);
     box-shadow: 0 10px 30px var(--accent-glow);
   }
 

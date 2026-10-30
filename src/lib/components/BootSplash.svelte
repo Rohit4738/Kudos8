@@ -193,7 +193,7 @@
     width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--accent), var(--brand-violet, #8b5cf6));
+    background: linear-gradient(90deg, var(--accent), var(--accent-2, #8b5cf6));
     box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.55);
     transform: scaleX(0);
     transform-origin: left center;

@@ -793,3 +793,35 @@ work, not frozen contracts. No `src-tauri/**` file was changed.
   surfaces the backend error string in the card.
 - Boot capture required emulated `prefers-reduced-motion: no-preference`; on a machine with
   reduced motion the splash removes itself at 80 ms by design.
+
+---
+
+## v0.2.0 - artwork, Steam account access, branding, docs and controller polish
+
+Shipped after the v0.1.0 tag. All work landed on `main` and the `v0.2.0` tag.
+
+| Task | Scope | Evidence |
+| --- | --- | --- |
+| M | SteamGridDB artwork: secure key, search/apply for grid/hero/logo/icon, local cache, write into Steam `config/grid/` | `artProvider.ts`, `ApiKeyGuide.svelte`, `ArtworkCard.svelte`, `ArtPicker.svelte`; `npm run check` 0/0 |
+| L | Optional Steam Web API key: complete owned library, DPAPI vault, 6 h cache, privacy/401/429 copy | `steam_api.rs` (11 tests), `steamKey.ts`, `SteamKeyCard.svelte`; `rust:test` 106 + 3 |
+| N | Refined mark/wordmark, PS5 boot sequence, 54 regenerated icons, favicon | `BrandMark.svelte`, `BootSplash.svelte`, `src-tauri/icons/**`; boot frames `sessionN-boot-*` |
+| K | User guide, troubleshooting, architecture, roadmap, deploy notes, static `site/` | `docs/**`, `site/**`; no absolute local paths |
+| O | Whole-app colour schemes, section awareness, controller scrolling, rail focus | `theme.ts`, `app.css`, `App.svelte`, `Home.svelte`, `MediaRow.svelte`, `shellFocus.svelte.ts`, `padNav.ts` |
+
+**Colour scheme contract.** `applyAccent()` writes `--accent`, `--accent-rgb`,
+`--accent-2`, `--accent-2-rgb`, `--accent-soft`, `--accent-glow`,
+`--accent-contrast`, `--line-accent` and accent-tinted `--bg-0..3`. Components use
+those tokens only; no hardcoded accent blue remains outside the colour picker.
+
+**Controller contract.** Home owns the page zone (Up/Down sections, Left/Right
+tiles, Left at column 0 opens the rail, Start toggles it, A opens, B clears the
+filter). The shell owns the rail zone (Up/Down, A selects, B closes). Settings and
+GameDetail move DOM focus with Up/Down and scroll it into view.
+
+**Manual checks still open.**
+
+- Live SteamGridDB key: search, apply and the real `config/grid/` write.
+- Live Steam Web API key: real owned count, 401/429 and private-profile paths.
+- Real controller: Xbox and PlayStation pads, rail entry, section scroll feel.
+- Live Add-to-Steam with Steam closed, then auto-art.
+- Epic/GOG against real clients (fixture-only here).
