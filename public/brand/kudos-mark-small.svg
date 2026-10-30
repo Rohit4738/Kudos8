@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-labelledby="kudos-mark-small-title">
+  <title id="kudos-mark-small-title">Kudos</title>
+  <!-- Below 32px: flat fills, no halo or fine gradients, 3/32 stroke. -->
+  <rect width="32" height="32" rx="7.25" fill="#0b1220"/>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="6.75" fill="none" stroke="#2b3c5e" stroke-opacity="0.55"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11.5 15 20.5 7.5M11.5 15 20.5 22.5"/>
+  </g>
+  <rect x="11.5" y="24.5" width="9" height="2" rx="1" fill="#6f9dff"/>
+</svg>

@@ -1,35 +1,82 @@
 <!--
-  Short startup vignette. It never blocks the app (pages render behind it),
-  removes itself at 600 ms and any input skips it. OWNER: Session I.
+  Kudos boot vignette. The Home shell is mounted and painted underneath this
+  fixed overlay, so skipping is free and never waits on the animation.
+  OWNER: Session N.
+
+  Timeline (normal motion, ~1.14s):
+    0-150ms    black hold
+    150-490ms  mark fades in, scale 0.92 -> 1; accent bloom blooms
+    470-730ms  thin accent rule sweeps under the mark
+    600-1040ms KUDOS wordmark reveals with tracking ease
+    920-1140ms overlay fades to Home
+
+  Any pointer/key/wheel/gamepad input unmounts the overlay immediately.
+  prefers-reduced-motion gets a plain 200ms fade with no scale or sweep.
+  `?boot=1` forces the splash even after the module has already booted once.
 -->
+<script module lang="ts">
+  let booted = false;
+</script>
+
 <script lang="ts">
   import { onMount } from "svelte";
+  import { onGamepad } from "../gamepad";
+  import BrandMark from "./BrandMark.svelte";
 
-  let visible = $state(true);
+  const params =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : null;
+  const forceBoot = params?.get("boot") === "1";
+  const shouldShow = forceBoot || !booted;
+  booted = true;
+
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let visible = $state(shouldShow);
   let leaving = $state(false);
 
   onMount(() => {
-    const reduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const fadeAt = reduced ? 0 : 330;
-    const removeAt = reduced ? 80 : 600;
+    if (!visible) return;
+
+    let fadeTimer: ReturnType<typeof setTimeout> | undefined;
     let removeTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const fadeTimer = setTimeout(() => (leaving = true), fadeAt);
-    removeTimer = setTimeout(() => (visible = false), removeAt);
+    function clearTimers(): void {
+      if (fadeTimer) clearTimeout(fadeTimer);
+      if (removeTimer) clearTimeout(removeTimer);
+      fadeTimer = undefined;
+      removeTimer = undefined;
+    }
 
-    function skip(): void {
+    function skip(event?: Event): void {
+      // Swallow the first input so it only dismisses the splash; the next one
+      // reaches the Home shell that is already mounted underneath.
+      event?.stopPropagation();
+      clearTimers();
       visible = false;
     }
 
-    window.addEventListener("pointerdown", skip, { capture: true, once: true });
-    window.addEventListener("keydown", skip, { capture: true, once: true });
-    window.addEventListener("wheel", skip, { capture: true, once: true });
+    if (reducedMotion) {
+      fadeTimer = setTimeout(() => (leaving = true), 30);
+      removeTimer = setTimeout(() => (visible = false), 250);
+    } else {
+      fadeTimer = setTimeout(() => (leaving = true), 920);
+      removeTimer = setTimeout(() => (visible = false), 1140);
+    }
+
+    const stopGamepad = onGamepad(() => skip());
+    const passive = { capture: true, passive: true } as const;
+
+    window.addEventListener("pointerdown", skip, passive);
+    window.addEventListener("keydown", skip, { capture: true });
+    window.addEventListener("wheel", skip, passive);
 
     return () => {
-      clearTimeout(fadeTimer);
-      if (removeTimer) clearTimeout(removeTimer);
+      clearTimers();
+      stopGamepad();
       window.removeEventListener("pointerdown", skip, true);
       window.removeEventListener("keydown", skip, true);
       window.removeEventListener("wheel", skip, true);
@@ -38,11 +85,26 @@
 </script>
 
 {#if visible}
-  <div class="boot" class:leaving aria-hidden="true">
+  <div
+    class="boot"
+    class:leaving
+    class:reduced={reducedMotion}
+    aria-hidden="true"
+  >
     <div class="core">
-      <span class="mark">K</span>
-      <span class="word">Kudos</span>
-      <span class="bar"><span class="fill"></span></span>
+      <div class="mark-wrap">
+        <span class="bloom"></span>
+        <div class="mark"><BrandMark size={104} glow /></div>
+      </div>
+      <div class="rule"><span class="rule-fill"></span></div>
+      <div class="wordmark">
+        <BrandMark
+          variant="wordmark"
+          size={190}
+          reveal={!reducedMotion}
+          delay={600}
+        />
+      </div>
     </div>
   </div>
 {/if}
@@ -54,9 +116,9 @@
     z-index: 200;
     display: grid;
     place-items: center;
-    background: #04050a;
+    background: var(--boot-bg, #04050a);
     opacity: 1;
-    transition: opacity 260ms var(--ease-out);
+    transition: opacity 220ms var(--ease-out);
     will-change: opacity;
   }
 
@@ -69,69 +131,109 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    animation: boot-in 420ms var(--ease-out) both;
+    transform: translateY(-6px);
+  }
+
+  .mark-wrap {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 104px;
+    height: 104px;
+  }
+
+  .bloom {
+    position: absolute;
+    inset: -82px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 50% 50%,
+      rgba(var(--accent-rgb), 0.32) 0%,
+      rgba(var(--accent-rgb), 0.12) 38%,
+      rgba(var(--accent-rgb), 0) 70%
+    );
+    opacity: 0;
+    transform: scale(0.82);
+    animation: bloom-in 520ms var(--ease-out) 150ms both;
+    pointer-events: none;
     will-change: transform, opacity;
   }
 
-  @keyframes boot-in {
+  .mark {
+    position: relative;
+    z-index: 1;
+    opacity: 0;
+    transform: scale(0.92);
+    animation: mark-in 340ms var(--ease-out) 150ms both;
+    will-change: transform, opacity;
+  }
+
+  .rule {
+    width: 132px;
+    height: 2px;
+    margin-top: 22px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 0;
+    animation: rule-track-in 1ms linear 470ms both;
+  }
+
+  @keyframes rule-track-in {
     from {
       opacity: 0;
-      transform: translateY(10px) scale(0.97);
     }
     to {
       opacity: 1;
-      transform: none;
     }
   }
 
-  .mark {
-    display: grid;
-    place-items: center;
-    width: 64px;
-    height: 64px;
-    border-radius: 20px;
-    font-size: 27px;
-    font-weight: 800;
-    letter-spacing: -0.06em;
-    color: #fff;
-    background: linear-gradient(145deg, var(--accent) 0%, #7b4cff 100%);
-    box-shadow:
-      0 18px 50px var(--accent-glow),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  }
-
-  .word {
-    font-family: var(--font-display);
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0.32em;
-    text-transform: uppercase;
-    color: rgba(244, 247, 255, 0.86);
-    padding-left: 0.32em;
-  }
-
-  .bar {
-    display: block;
-    width: 92px;
-    height: 2px;
-    border-radius: 999px;
-    overflow: hidden;
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .fill {
+  .rule-fill {
     display: block;
     width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--accent), #b58cff);
+    background: linear-gradient(90deg, var(--accent), var(--brand-violet, #8b5cf6));
+    box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.55);
+    transform: scaleX(0);
     transform-origin: left center;
-    animation: boot-fill 480ms var(--ease-out) both;
+    animation: rule-sweep 260ms var(--ease-out) 470ms both;
     will-change: transform;
   }
 
-  @keyframes boot-fill {
+  .wordmark {
+    display: flex;
+    justify-content: center;
+    margin-top: 18px;
+  }
+
+  @keyframes mark-in {
+    from {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes bloom-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.82);
+    }
+    55% {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    100% {
+      opacity: 0.55;
+      transform: scale(1.14);
+    }
+  }
+
+  @keyframes rule-sweep {
     from {
       transform: scaleX(0);
     }
@@ -140,13 +242,63 @@
     }
   }
 
+  .boot.reduced {
+    transition-duration: 200ms !important;
+  }
+
+  .boot.reduced .mark,
+  .boot.reduced .bloom,
+  .boot.reduced .rule,
+  .boot.reduced .rule-fill {
+    animation: none !important;
+  }
+
+  .boot.reduced .rule {
+    opacity: 1;
+  }
+
+  .boot.reduced .mark {
+    opacity: 1;
+    transform: none;
+  }
+
+  .boot.reduced .bloom {
+    opacity: 0.55;
+    transform: none;
+  }
+
+  .boot.reduced .rule-fill {
+    transform: scaleX(1);
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .core,
-    .fill {
-      animation: none;
-    }
     .boot {
-      transition: none;
+      transition-duration: 200ms !important;
+    }
+
+    .mark,
+    .bloom,
+    .rule,
+    .rule-fill {
+      animation: none !important;
+    }
+
+    .mark {
+      opacity: 1;
+      transform: none;
+    }
+
+    .bloom {
+      opacity: 0.55;
+      transform: none;
+    }
+
+    .rule {
+      opacity: 1;
+    }
+
+    .rule-fill {
+      transform: scaleX(1);
     }
   }
 </style>

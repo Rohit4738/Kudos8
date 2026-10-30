@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="240" viewBox="0 0 1000 240" role="img" aria-labelledby="kudos-wordmark-title">
+  <title id="kudos-wordmark-title">KUDOS</title>
+  <!-- Stroke-built wordmark. The K is the same chevron as the mark;
+       letters sit on a 140-unit cap height with 50-unit tracking. -->
+  <g fill="none" stroke="#f4f7ff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <g id="wordmark-k">
+      <path d="M96 50V190"/>
+      <path d="M96 120 216 50"/>
+      <path d="M96 120 216 190"/>
+    </g>
+    <g id="wordmark-u">
+      <path d="M266 50V130A60 60 0 0 0 386 130V50"/>
+    </g>
+    <g id="wordmark-d">
+      <path d="M436 50V190"/>
+      <path d="M436 50H516A55 70 0 0 1 516 190H436"/>
+    </g>
+    <g id="wordmark-o">
+      <ellipse cx="677" cy="120" rx="65" ry="70"/>
+    </g>
+    <g id="wordmark-s">
+      <path d="M889 50H829A35 35 0 0 0 829 120H869A35 35 0 0 1 869 190H809"/>
+    </g>
+  </g>
+</svg>
