@@ -7,7 +7,13 @@
   import { onMount } from "svelte";
   import { addToSteam, getAchievements, launchGame } from "../lib/api";
   import { recordLaunch } from "../lib/history.svelte";
-  import { heroCandidates, placeholderBackground } from "../lib/art";
+  import {
+    coverSource,
+    heroCandidates,
+    isTauriRuntime,
+    placeholderBackground,
+  } from "../lib/art";
+  import { getArtStatus, type ArtStatus } from "../lib/artProvider";
   import { isFavorite, toggleFavorite } from "../lib/favorites.svelte";
   import {
     formatBytes,
@@ -26,7 +32,9 @@
     playtimeFor,
     unhideGame,
   } from "../lib/library.svelte";
+  import { focusNext } from "../lib/padNav";
   import { back } from "../lib/router.svelte";
+  import { shellFocus } from "../lib/shellFocus.svelte";
   import {
     isSteamOwnedGame,
     playtimeSummary,
@@ -35,6 +43,7 @@
   import { applyStoredAccent } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
   import type { AchievementSummary } from "../lib/types";
+  import ArtPicker from "../lib/components/ArtPicker.svelte";
   import ControlHint from "../lib/components/ControlHint.svelte";
   import GameArt from "../lib/components/GameArt.svelte";
   import Icon from "../lib/components/Icon.svelte";
@@ -52,7 +61,16 @@
   let steamState = $state<SteamState>("idle");
   let steamError = $state<string | null>(null);
 
+  let artOpen = $state(false);
+  let artStatus = $state<ArtStatus | null>(null);
+  let localCover = $state<string | null>(null);
+  let localHero = $state<string | null>(null);
+  let artFor = $state("");
+
   const game = $derived(findGame(id));
+  const displayGame = $derived(
+    game && localCover ? { ...game, coverImage: localCover } : game,
+  );
   const hidden = $derived(game ? isHidden(game.id) : false);
   const favorite = $derived(game ? isFavorite(game.id) : false);
   const playtime = $derived(game ? playtimeFor(game.id) : null);
@@ -64,7 +82,13 @@
     game ? game.isInstalled || isSteamOwnedGame(game) : false,
   );
 
-  const heroSources = $derived(game ? heroCandidates(game) : []);
+  const heroSources = $derived.by(() => {
+    if (!displayGame) return [];
+    const list = localHero
+      ? [localHero, ...heroCandidates(displayGame)]
+      : heroCandidates(displayGame);
+    return [...new Set(list)];
+  });
   let heroAttempt = $state(0);
   let heroFailed = $state(false);
   let heroFor = $state("");
@@ -77,6 +101,30 @@
     heroAttempt = 0;
     heroFailed = false;
   });
+
+  // Session M: reflect art the user already applied (and auto-art written after
+  // "Add to Steam") without waiting for a library rescan.
+  $effect(() => {
+    const current = game;
+    if (!current || current.id === artFor) return;
+    artFor = current.id;
+    localCover = null;
+    localHero = null;
+    void refreshArt(current.id);
+  });
+
+  async function refreshArt(gameId: string): Promise<void> {
+    if (!isTauriRuntime()) return;
+    const status = await getArtStatus(gameId);
+    artStatus = status;
+    if (status.grid) localCover = coverSource(status.grid);
+    if (status.hero) localHero = coverSource(status.hero);
+  }
+
+  function closeArt(): void {
+    artOpen = false;
+    if (game) void refreshArt(game.id);
+  }
 
   const loading = $derived(library.status === "loading" && !game);
   const libraryError = $derived(library.status === "error" ? library.error : null);
@@ -140,13 +188,18 @@
     if (library.status === "idle") void loadLibrary();
 
     const stopGamepad = onGamepad((action) => {
-      if (action === "back") back();
+      if (artOpen) return;
+      if (shellFocus.zone === "rail") return;
+      if (action === "up") focusNext(-1);
+      else if (action === "down") focusNext(1);
+      else if (action === "back") back();
       else if (action === "confirm") void play();
       else if (action === "secondary" && game?.platform === "gog") void addSteam();
     });
 
     function onKeydown(event: KeyboardEvent): void {
       if (
+        artOpen ||
         event.defaultPrevented ||
         event.ctrlKey ||
         event.metaKey ||
@@ -248,6 +301,7 @@
         return;
       }
 
+      const addedId = game.id;
       await addToSteam(game.id);
       steamState = "success";
       pushToast(
@@ -255,6 +309,10 @@
         "Shortcut added to Steam",
         "Restart Steam to see the new shortcut in your Library.",
       );
+      // Auto-art runs after this command resolves. Poll twice, quietly, so the
+      // local cover appears without blocking the toast.
+      void wait(3500).then(() => refreshArt(addedId));
+      void wait(9000).then(() => refreshArt(addedId));
     } catch (error) {
       const message = humanError(error);
       steamState = "error";
@@ -331,7 +389,7 @@
 
       <div class="hero-grid">
         <div class="cover">
-          <GameArt {game} eager />
+          <GameArt game={displayGame ?? game} eager />
         </div>
 
         <div class="lede">
@@ -406,11 +464,28 @@
               </button>
             {/if}
 
+            {#if game.platform !== "steam"}
+              <button
+                type="button"
+                class="art-action"
+                onclick={() => (artOpen = true)}
+              >
+                <Icon name="spark" size={16} />
+                <span>Change artwork</span>
+              </button>
+            {/if}
+
             <button type="button" class="hide-action" onclick={toggleHidden}>
               <Icon name={hidden ? "eye" : "hide"} size={16} />
               <span>{hidden ? "Unhide" : "Hide"}</span>
             </button>
           </div>
+
+          {#if artStatus?.error}
+            <p class="art-note" title={artStatus.error}>
+              Automatic artwork was incomplete. Choose Change artwork to retry.
+            </p>
+          {/if}
 
           {#if game.platform === "gog"}
             <p class="steam-note" class:error={steamState === "error"}>
@@ -425,6 +500,7 @@
           {/if}
 
           <p class="key-hint">
+            <ControlHint action="dpad" keys="↑ ↓" label="Move" />
             <ControlHint action="confirm" keys="Enter" label={primaryLabel} />
             <ControlHint action="secondary" keys="F" label="Favorite" />
             {#if game.platform === "gog"}
@@ -502,6 +578,11 @@
   label={launchMode === "install" ? "Opening Steam" : "Launching"}
   hint={launchMode === "install" ? "Approve the install in Steam" : "Handing over to the game window"}
 />
+
+{#if artOpen && game}
+  <ArtPicker {game} onclose={closeArt} />
+{/if}
+
 <Toaster />
 
 <style>
@@ -820,7 +901,8 @@
     transform: translateY(-1px);
   }
 
-  .favorite-action {
+  .favorite-action,
+  .art-action {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -839,7 +921,8 @@
     will-change: transform;
   }
 
-  .favorite-action:hover {
+  .favorite-action:hover,
+  .art-action:hover {
     color: var(--fg-0);
     transform: translateY(-1px);
   }
@@ -849,6 +932,14 @@
     box-shadow:
       inset 0 0 0 1px rgba(255, 209, 102, 0.36),
       0 0 22px rgba(255, 209, 102, 0.12);
+  }
+
+  .art-note {
+    margin: 10px 0 0;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--fg-2);
+    opacity: 0.86;
   }
 
   .steam-note {

@@ -30,7 +30,9 @@
     unhideGame,
     type SortMode,
   } from "../lib/library.svelte";
+  import { activateFocused, focusNext } from "../lib/padNav";
   import { back } from "../lib/router.svelte";
+  import { shellFocus } from "../lib/shellFocus.svelte";
   import {
     DEFAULT_ACCENT,
     ACCENT_PRESETS,
@@ -62,11 +64,13 @@
     type StartupPage,
   } from "../lib/windowPrefs";
   import type { Game, SteamStatus } from "../lib/types";
+  import ArtworkCard from "../lib/components/ArtworkCard.svelte";
   import Icon from "../lib/components/Icon.svelte";
   import IdleSettingsCard from "../lib/components/IdleSettings.svelte";
   import PadGlyph from "../lib/components/PadGlyph.svelte";
   import Spinner from "../lib/components/Spinner.svelte";
   import SteamLibraryCard from "../lib/components/SteamLibraryCard.svelte";
+  import SteamKeyCard from "../lib/components/SteamKeyCard.svelte";
   import Toaster from "../lib/components/Toaster.svelte";
 
   const desktop = isTauriRuntime();
@@ -106,7 +110,11 @@
     void loadSteam();
 
     const stopGamepad = onGamepad((action) => {
-      if (action === "back") back();
+      if (shellFocus.zone === "rail") return;
+      if (action === "up") focusNext(-1);
+      else if (action === "down") focusNext(1);
+      else if (action === "confirm") activateFocused();
+      else if (action === "back") back();
     });
     return stopGamepad;
   });
@@ -395,6 +403,10 @@
 
     <SteamLibraryCard />
 
+    <SteamKeyCard />
+
+    <ArtworkCard />
+
     <IdleSettingsCard
       value={idlePrefs}
       onChange={(next) => updateIdlePrefs(next)}
@@ -429,7 +441,8 @@
       </div>
 
       {#if glyphLayout}
-        <div class="pad-glyphs" aria-label="Face button glyphs">
+        <div class="pad-glyphs" aria-label="Controller button glyphs">
+          <PadGlyph layout={glyphLayout} action="dpad" size={20} />
           <PadGlyph layout={glyphLayout} action="confirm" size={20} />
           <PadGlyph layout={glyphLayout} action="back" size={20} />
           <PadGlyph layout={glyphLayout} action="secondary" size={20} />
