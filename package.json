@@ -1,6 +1,6 @@
 {
   "name": "kudos",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Kudos - a lightweight PS5-style Windows game launcher",
   "private": true,
   "type": "module",

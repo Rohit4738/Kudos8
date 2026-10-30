@@ -6,12 +6,16 @@
 //! - Frontend commands: `list_games`, `launch_game`, `add_to_steam`, `get_steam_status`.
 
 pub mod achievements;
+pub mod art;
 pub mod commands;
+pub mod steam_api;
 pub mod error;
 pub mod launch;
 pub mod models;
+pub mod secrets;
 pub mod sources;
 pub mod state;
+pub mod steam_grid;
 pub mod steam_owned;
 pub mod steam_recent;
 
@@ -33,6 +37,17 @@ pub fn run() {
             commands::get_steam_playtime,
             commands::get_steam_sync_status,
             commands::sync_steam_metadata,
+            commands::get_secret_status,
+            commands::set_secret,
+            commands::clear_secret,
+            commands::search_art,
+            commands::apply_art,
+            commands::get_art_status,
+            commands::get_steam_api_status,
+            commands::set_steam_api_key,
+            commands::clear_steam_api_key,
+            commands::sync_steam_owned,
+            commands::get_steam_owned_api_games,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kudos");

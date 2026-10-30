@@ -31,7 +31,7 @@
         : action === "back"
           ? "#ff5f6d"
           : action === "secondary"
-            ? "#4c8dff"
+            ? "var(--accent)"
             : "#f5c542"
       : family === "nintendo"
         ? action === "confirm"

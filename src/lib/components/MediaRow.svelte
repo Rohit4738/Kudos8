@@ -91,6 +91,9 @@
       <span class="kicker">{title}</span>
       {#if subtitle}<span class="subtitle">{subtitle}</span>{/if}
       <span class="count">{items.length}</span>
+      {#if active}
+        <span class="browsing">Browsing</span>
+      {/if}
       <span class="chevron" class:up={!collapsed} aria-hidden="true">
         <Icon name="chevron" size={14} />
       </span>
@@ -122,10 +125,51 @@
 
 <style>
   .row {
+    position: relative;
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    padding: 4px 8px 4px 14px;
+    border-radius: var(--radius-md);
+    opacity: 0.66;
+    transition:
+      opacity 240ms var(--ease-out),
+      background 240ms var(--ease-out);
+  }
+
+  .row.active {
+    opacity: 1;
+    background: linear-gradient(
+      90deg,
+      rgba(var(--accent-rgb), 0.11),
+      rgba(var(--accent-rgb), 0.03) 46%,
+      transparent 72%
+    );
+  }
+
+  /* Left accent bar: unmistakable "this is the section you are browsing". */
+  .row::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.55);
+    opacity: 0;
+    transform: scaleY(0.35);
+    transform-origin: center;
+    transition:
+      opacity 220ms var(--ease-out),
+      transform 260ms var(--ease-out);
+  }
+
+  .row.active::before {
+    opacity: 1;
+    transform: none;
   }
 
   .head {
@@ -159,7 +203,32 @@
   }
 
   .row.active .kicker {
-    color: var(--fg-0);
+    color: var(--accent);
+  }
+
+  .browsing {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.18);
+    box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.38);
+    color: var(--accent);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    animation: browsing-in 180ms var(--ease-out);
+  }
+
+  @keyframes browsing-in {
+    from {
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   .subtitle {
@@ -222,7 +291,7 @@
     overflow-y: hidden;
     padding: 6px 4px 14px;
     scrollbar-width: none;
-    opacity: 0.72;
+    opacity: 1;
     transition: opacity 260ms var(--ease-out);
   }
 

@@ -1,0 +1,71 @@
+{
+  "response": {
+    "game_count": 8,
+    "games": [
+      {
+        "appid": 1091500,
+        "name": "Cyberpunk 2077",
+        "playtime_forever": 2520,
+        "img_icon_url": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+        "has_community_visible_stats": true,
+        "playtime_windows_forever": 2520,
+        "playtime_mac_forever": 0,
+        "playtime_linux_forever": 0,
+        "rtime_last_played": 1793162961
+      },
+      {
+        "appid": 1245620,
+        "name": "ELDEN RING",
+        "playtime_forever": 7200,
+        "img_icon_url": "00112233445566778899aabbccddeeff00112233",
+        "playtime_windows_forever": 7200,
+        "playtime_mac_forever": 0,
+        "playtime_linux_forever": 0,
+        "rtime_last_played": 1793076561
+      },
+      {
+        "appid": 620,
+        "name": "Portal 2",
+        "playtime_forever": 300,
+        "img_icon_url": "ffeeddccbbaa99887766554433221100ffeeddcc",
+        "playtime_windows_forever": 300,
+        "playtime_mac_forever": 0,
+        "playtime_linux_forever": 0,
+        "rtime_last_played": 0
+      },
+      {
+        "appid": 391540,
+        "name": "Undertale",
+        "playtime_forever": 120,
+        "img_icon_url": "",
+        "playtime_windows_forever": 120,
+        "playtime_mac_forever": 0,
+        "playtime_linux_forever": 0
+      },
+      {
+        "appid": 413150,
+        "name": "  Stardew Valley  ",
+        "playtime_forever": 0,
+        "img_icon_url": "0123456789abcdef0123456789abcdef01234567"
+      },
+      {
+        "appid": 228980,
+        "name": "Steamworks Common Redistributables",
+        "playtime_forever": 0,
+        "img_icon_url": ""
+      },
+      {
+        "appid": 7,
+        "name": "Steam Client",
+        "playtime_forever": 0,
+        "img_icon_url": ""
+      },
+      {
+        "appid": 760,
+        "name": "Steam Cloud",
+        "playtime_forever": 0,
+        "img_icon_url": ""
+      }
+    ]
+  }
+}

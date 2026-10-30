@@ -6,14 +6,26 @@
   import { onMount } from "svelte";
   import { fade } from "svelte/transition";
   import { startController } from "./lib/controller.svelte";
+  import { onGamepad } from "./lib/gamepad";
   import { router, navigate, back } from "./lib/router.svelte";
-  import { openSearch } from "./lib/search.svelte";
-  import { applyStoredBackground, applyStoredDensity } from "./lib/theme";
+  import { openSearch, searchState } from "./lib/search.svelte";
+  import {
+    applyStoredAccent,
+    applyStoredBackground,
+    applyStoredDensity,
+  } from "./lib/theme";
+  import {
+    enterRail,
+    exitRail,
+    moveRail,
+    shellFocus,
+  } from "./lib/shellFocus.svelte";
   import { readStartupPage } from "./lib/windowPrefs";
   import Home from "./pages/Home.svelte";
   import GameDetail from "./pages/GameDetail.svelte";
   import Settings from "./pages/Settings.svelte";
   import BootSplash from "./lib/components/BootSplash.svelte";
+  import BrandMark from "./lib/components/BrandMark.svelte";
   import Icon from "./lib/components/Icon.svelte";
   import IdleHost from "./lib/components/IdleHost.svelte";
   import SearchOverlay from "./lib/components/SearchOverlay.svelte";
@@ -23,16 +35,89 @@
   );
 
   function onKeydown(event: KeyboardEvent) {
+    if (shellFocus.zone === "rail") {
+      switch (event.key) {
+        case "ArrowUp":
+          event.preventDefault();
+          moveRail(-1);
+          return;
+        case "ArrowDown":
+          event.preventDefault();
+          moveRail(1);
+          return;
+        case "Enter": {
+          event.preventDefault();
+          const run = railActions[shellFocus.index];
+          exitRail();
+          run?.();
+          return;
+        }
+        case "Escape":
+        case "ArrowRight":
+          event.preventDefault();
+          exitRail();
+          return;
+      }
+    }
+
     if (event.key === "Escape" && router.route.name !== "home") {
       event.preventDefault();
       back();
     }
   }
 
+  /** Rail actions, in visual order: Library, Search, Settings. */
+  const railActions: (() => void)[] = [
+    () => navigate({ name: "home" }),
+    openSearch,
+    () => navigate({ name: "settings" }),
+  ];
+
+  function railIndexForRoute(): number {
+    return router.route.name === "settings" ? 2 : 0;
+  }
+
+  /**
+   * Controller shell handling. The rail owns Up/Down/Confirm while it is
+   * focused; pages own the "page" zone. Start (menu) opens the rail from
+   * anywhere, Back/Left/Right closes it.
+   */
+  function handleShellPad(action: string): void {
+    if (searchState.open) return;
+
+    if (action === "menu") {
+      if (shellFocus.zone === "rail") exitRail();
+      else enterRail(railIndexForRoute());
+      return;
+    }
+
+    if (shellFocus.zone !== "rail") return;
+
+    switch (action) {
+      case "up":
+        moveRail(-1);
+        break;
+      case "down":
+        moveRail(1);
+        break;
+      case "confirm": {
+        const run = railActions[shellFocus.index];
+        exitRail();
+        run?.();
+        break;
+      }
+      case "back":
+        exitRail();
+        break;
+    }
+  }
+
   onMount(() => {
+    applyStoredAccent();
     applyStoredBackground();
     applyStoredDensity();
     const stopController = startController();
+    const stopGamepad = onGamepad(handleShellPad);
 
     // A direct jump (no history entry): startup should not create a fake "back".
     if (router.route.name === "home" && readStartupPage() === "settings") {
@@ -42,6 +127,7 @@
     window.addEventListener("keydown", onKeydown);
     return () => {
       stopController();
+      stopGamepad();
       window.removeEventListener("keydown", onKeydown);
     };
   });
@@ -49,18 +135,24 @@
 
 <div class="shell">
   <div class="backdrop" aria-hidden="true"></div>
-  <nav class="rail" aria-label="Primary">
+  <nav
+    class="rail"
+    class:rail-zone={shellFocus.zone === "rail"}
+    aria-label="Primary"
+  >
     <button
       class="brand"
       title="Kudos"
+      aria-label="Kudos home"
       onclick={() => navigate({ name: "home" })}
     >
-      K
+      <BrandMark size={46} glow />
     </button>
 
     <div class="rail-items">
       <button
         class="rail-item"
+        class:focused={shellFocus.zone === "rail" && shellFocus.index === 0}
         class:active={router.route.name === "home" || router.route.name === "game"}
         title="Library"
         onclick={() => navigate({ name: "home" })}
@@ -71,6 +163,7 @@
 
       <button
         class="rail-item"
+        class:focused={shellFocus.zone === "rail" && shellFocus.index === 1}
         title="Search (Ctrl+K or /)"
         onclick={openSearch}
       >
@@ -80,6 +173,7 @@
 
       <button
         class="rail-item"
+        class:focused={shellFocus.zone === "rail" && shellFocus.index === 2}
         class:active={router.route.name === "settings"}
         title="Settings"
         onclick={() => navigate({ name: "settings" })}
@@ -89,7 +183,13 @@
       </button>
     </div>
 
-    <div class="rail-foot">v0.1</div>
+    <div class="rail-foot">
+      {#if shellFocus.zone === "rail"}
+        <span class="rail-pad">A select · B close</span>
+      {:else}
+        <span>v0.2</span>
+      {/if}
+    </div>
   </nav>
 
   <main class="stage">
@@ -127,8 +227,8 @@
     z-index: 0;
     pointer-events: none;
     background:
-      radial-gradient(1200px 700px at 78% -12%, rgba(76, 141, 255, 0.18), transparent 62%),
-      radial-gradient(900px 600px at 4% 110%, rgba(123, 76, 255, 0.12), transparent 60%),
+      radial-gradient(1200px 700px at 78% -12%, rgba(var(--accent-rgb), 0.18), transparent 62%),
+      radial-gradient(900px 600px at 4% 110%, rgba(var(--accent-2-rgb), 0.12), transparent 60%),
       linear-gradient(160deg, var(--bg-1) 0%, var(--bg-0) 100%);
   }
 
@@ -140,8 +240,8 @@
     inset: -18%;
     background:
       radial-gradient(42% 54% at 28% 30%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 70%),
-      radial-gradient(40% 48% at 76% 72%, rgba(123, 76, 255, 0.28), transparent 70%),
-      linear-gradient(135deg, #05060a 0%, #0b1220 52%, #05060a 100%);
+      radial-gradient(40% 48% at 76% 72%, rgba(var(--accent-2-rgb), 0.28), transparent 70%),
+      linear-gradient(135deg, var(--bg-0) 0%, var(--bg-2) 52%, var(--bg-0) 100%);
     animation: backdrop-drift 26s ease-in-out infinite alternate;
     will-change: transform;
   }
@@ -181,15 +281,10 @@
   .brand {
     width: 46px;
     height: 46px;
+    padding: 0;
     border-radius: 14px;
     display: grid;
     place-items: center;
-    font-weight: 800;
-    font-size: 20px;
-    letter-spacing: -0.04em;
-    color: #fff;
-    background: linear-gradient(145deg, var(--accent) 0%, #7b4cff 100%);
-    box-shadow: 0 6px 22px var(--accent-glow);
     transition: transform var(--dur-fast) var(--ease-out);
   }
   .brand:hover {
@@ -222,8 +317,34 @@
   }
   .rail-item.active {
     color: var(--fg-0);
-    background: rgba(76, 141, 255, 0.16);
-    box-shadow: inset 0 0 0 1px rgba(76, 141, 255, 0.28);
+    background: rgba(var(--accent-rgb), 0.16);
+    box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.28);
+  }
+
+  .rail-item.focused {
+    color: var(--fg-0);
+    background: rgba(var(--accent-rgb), 0.26);
+    box-shadow:
+      inset 0 0 0 2px var(--accent),
+      0 0 22px rgba(var(--accent-rgb), 0.28);
+    transform: translateX(2px);
+  }
+
+  .rail-item.focused .rail-label {
+    opacity: 1;
+  }
+
+  .rail.rail-zone {
+    border-right-color: var(--line-accent);
+    background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+  }
+
+  .rail-pad {
+    font-size: 9px;
+    letter-spacing: 0.02em;
+    color: var(--accent);
+    text-align: center;
+    line-height: 1.5;
   }
 
   .glyph {

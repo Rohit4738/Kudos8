@@ -867,12 +867,12 @@ mod http {
 }
 
 #[cfg(windows)]
-fn http_get(host: &str, path: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn http_get(host: &str, path: &str) -> Result<Vec<u8>, String> {
     http::get(host, path)
 }
 
 #[cfg(not(windows))]
-fn http_get(_host: &str, _path: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn http_get(_host: &str, _path: &str) -> Result<Vec<u8>, String> {
     Err("Steam metadata sync is only supported on Windows".to_string())
 }
 

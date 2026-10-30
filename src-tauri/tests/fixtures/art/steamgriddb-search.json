@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 4106,
+      "name": "The Witcher 3: Wild Hunt - Blood and Wine",
+      "release_date": 1465516800,
+      "types": ["steam", "gog"],
+      "verified": false
+    },
+    {
+      "id": 4105,
+      "name": "The Witcher 3: Wild Hunt",
+      "release_date": 1431993600,
+      "types": ["steam", "gog"],
+      "verified": true
+    },
+    {
+      "id": 4107,
+      "name": "The Witcher 2: Assassins of Kings",
+      "release_date": 1304380800,
+      "types": ["steam", "gog"],
+      "verified": true
+    }
+  ]
+}

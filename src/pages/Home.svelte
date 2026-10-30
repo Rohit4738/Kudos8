@@ -5,7 +5,7 @@
   OWNER: Session D / Session I (PS5 redesign).
 -->
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { fade } from "svelte/transition";
   import { coverSource, placeholderBackground } from "../lib/art";
   import {
@@ -33,6 +33,7 @@
   import { relativePlayed, resolveRecent } from "../lib/recent";
   import { navigate } from "../lib/router.svelte";
   import { openSearch, searchState } from "../lib/search.svelte";
+  import { shellFocus, enterRail } from "../lib/shellFocus.svelte";
   import { playtimeLabel, playtimeSummary, relativeLong } from "../lib/steam";
   import { applyStoredAccent, storedBackground } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
@@ -111,6 +112,7 @@
   let background = $state(storedBackground());
   let launching = $state<Game | null>(null);
   let launchMode = $state<"play" | "install">("play");
+  let rowsEl = $state<HTMLDivElement | null>(null);
 
   let ambientSnapshot = ambientFor(null);
   let ambient = $state<Ambient>(ambientSnapshot);
@@ -270,6 +272,30 @@
     return "";
   });
 
+  /**
+   * Keep the focused row on screen. The `.page` container is the vertical
+   * scroller; the row viewports only scroll horizontally. Without this, d-pad
+   * navigation moved focus below the fold and nothing appeared to happen.
+   */
+  let lastScrolledRow = -1;
+  $effect(() => {
+    const index = rowCursor;
+    if (index === lastScrolledRow) return;
+    const first = lastScrolledRow === -1;
+    lastScrolledRow = index;
+    if (first || !rowsEl || shellFocus.zone !== "page") return;
+
+    void tick().then(() => {
+      const element = rowsEl?.children[index] as HTMLElement | undefined;
+      if (!element) return;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      element.scrollIntoView({
+        block: "center",
+        behavior: reduced ? "auto" : "smooth",
+      });
+    });
+  });
+
   const trulyEmpty = $derived(
     library.status === "ready" && library.games.length === 0,
   );
@@ -420,9 +446,13 @@
   }
 
   function handlePad(action: string): void {
+    if (shellFocus.zone === "rail") return;
+
     switch (action) {
       case "left":
-        moveCol(-1);
+        // Left at the start of a row opens the rail, PS5-style.
+        if (colCursor === 0) enterRail(0);
+        else moveCol(-1);
         break;
       case "right":
         moveCol(1);
@@ -446,15 +476,14 @@
         if (focused) toggleFav(focused);
         break;
       case "back":
+        // Back clears the active filter; the rail opens with Left or Start.
         if (activeFilter !== "all") setFilter("all");
-        break;
-      case "menu":
-        navigate({ name: "settings" });
         break;
     }
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    if (shellFocus.zone === "rail") return;
     if (
       searchState.open ||
       event.defaultPrevented ||
@@ -470,7 +499,8 @@
       case "arrowleft":
       case "a":
         event.preventDefault();
-        moveCol(-1);
+        if (colCursor === 0) enterRail(0);
+        else moveCol(-1);
         break;
       case "arrowright":
       case "d":
@@ -697,7 +727,20 @@
         </button>
       </div>
     {:else}
-      <div class="rows">
+      {#if activeRow}
+        <div class="section-bar" aria-live="polite">
+          <span class="section-index">
+            {rowCursor + 1}<span class="section-total">/{rows.length}</span>
+          </span>
+          <span class="section-name">{activeRow.title}</span>
+          {#if activeRow.subtitle}
+            <span class="section-sub">{activeRow.subtitle}</span>
+          {/if}
+          <span class="section-pad">↑ ↓ section · ← → browse</span>
+        </div>
+      {/if}
+
+      <div class="rows" bind:this={rowsEl}>
         {#each rows as row, index (row.key)}
           <MediaRow
             title={row.title}
@@ -717,10 +760,12 @@
     {/if}
 
     <footer class="hints">
-      <ControlHint action="dpad" keys="↑ ↓" label="Rows" />
+      <ControlHint action="dpad" keys="↑ ↓" label="Sections" />
       <ControlHint action="dpad" keys="← →" label="Browse" />
       <ControlHint action="confirm" keys="Enter" label="Open" />
+      <ControlHint action="menu" keys="Start" label="Sidebar" />
       <ControlHint action="back" keys="Esc" label="Back" />
+      <span class="hint subtle"><kbd>◀</kbd> Sidebar</span>
       <span class="hint subtle"><kbd>P</kbd> Play / install</span>
       <span class="hint subtle"><kbd>F</kbd> Favorite</span>
       <span class="hint subtle hint-end">Hold or right-click a tile to favorite</span>
@@ -921,6 +966,80 @@
   }
 
   /* ---------- rows / skeleton ---------- */
+  /* ---------- active section indicator ---------- */
+  .section-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--accent-rgb), 0.22);
+    background: linear-gradient(
+      90deg,
+      rgba(var(--accent-rgb), 0.16),
+      rgba(var(--accent-rgb), 0.04) 62%,
+      transparent
+    );
+    color: var(--fg-1);
+    animation: section-in 220ms var(--ease-out);
+  }
+
+  .section-index {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 1px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: 9.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .section-total {
+    opacity: 0.62;
+    font-weight: 600;
+  }
+
+  .section-name {
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--fg-0);
+    white-space: nowrap;
+  }
+
+  .section-sub {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10.5px;
+    color: var(--fg-2);
+  }
+
+  .section-pad {
+    margin-left: auto;
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    color: var(--fg-2);
+    white-space: nowrap;
+  }
+
+  @keyframes section-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   .rows {
     display: flex;
     flex-direction: column;

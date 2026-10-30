@@ -13,8 +13,13 @@
   --fg-2: #77819b;
 
   --accent: #4c8dff;
+  --accent-rgb: 76, 141, 255;
+  --accent-2: #8b5cf6;
+  --accent-2-rgb: 139, 92, 246;
   --accent-soft: #2b5fbf;
   --accent-glow: rgba(76, 141, 255, 0.45);
+  --accent-contrast: #05060a;
+  --line-accent: rgba(76, 141, 255, 0.34);
   --danger: #ff5f6d;
   --ok: #3ddc97;
 
@@ -26,6 +31,11 @@
   --dur-fast: 140ms;
   --dur-med: 260ms;
   --dur-slow: 480ms;
+
+  /* Brand + boot tokens. Existing names above are untouched. */
+  --brand-ink: #f4f7ff;
+  --brand-violet: #8b5cf6;
+  --boot-bg: #04050a;
 
   --rail-w: 92px;
   --tile-scale: 1;
@@ -70,23 +80,31 @@ button {
 }
 
 button:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:focus-visible,
+.pad-focus {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--radius-sm);
+}
+
+/* Controller navigation: programmatic focus may not trigger :focus-visible,
+   so the pad helper adds this class to whatever it lands on. */
+.pad-focus {
+  outline-offset: 4px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 ::-webkit-scrollbar {
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-3);
+  background: color-mix(in srgb, var(--accent) 32%, var(--bg-3));
   border-radius: 999px;
 }
 
 ::selection {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 /* ---------------------------------------------------------------------------

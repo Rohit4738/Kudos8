@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 9001,
+      "score": 12,
+      "style": "alternate",
+      "url": "https://cdn2.steamgriddb.com/file/sgdb-storage/grid-9001.jpg",
+      "thumb": "https://cdn2.steamgriddb.com/thumb/9001.jpg",
+      "tags": ["portrait"],
+      "author": {
+        "name": "Necro",
+        "steam64": "76561198000000000",
+        "avatar": "https://cdn2.steamgriddb.com/avatar/necro.png"
+      },
+      "width": 600,
+      "height": 900,
+      "nsfw": false,
+      "humor": false,
+      "epilepsy": false
+    },
+    {
+      "id": 9002,
+      "score": 8,
+      "style": "material",
+      "url": "https://cdn2.steamgriddb.com/file/sgdb-storage/grid-9002.png",
+      "thumb": "https://cdn2.steamgriddb.com/thumb/9002.png",
+      "tags": ["portrait"],
+      "author": {
+        "name": "GeraltFan",
+        "steam64": "76561198000000001",
+        "avatar": "https://cdn2.steamgriddb.com/avatar/geralt.png"
+      },
+      "width": 600,
+      "height": 900,
+      "nsfw": false,
+      "humor": false,
+      "epilepsy": false
+    }
+  ]
+}

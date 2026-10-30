@@ -199,7 +199,7 @@
     align-items: flex-start;
     padding: clamp(48px, 12vh, 120px) 24px 24px;
     background:
-      radial-gradient(80% 60% at 50% 0%, rgba(76, 141, 255, 0.12), transparent 70%),
+      radial-gradient(80% 60% at 50% 0%, rgba(var(--accent-rgb), 0.12), transparent 70%),
       rgba(3, 4, 8, 0.72);
     backdrop-filter: blur(16px) saturate(1.1);
   }
