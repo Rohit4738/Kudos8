@@ -1,14 +1,14 @@
 # Kudos — Roadmap
 
-This roadmap separates **what shipped in v0.1.0**, **what is already on `main` but still in-flight**,
-and **what comes next**. It is ordered by priority, not by date. There are no promised release dates
+This roadmap separates **what shipped**, **what is implemented but still needs a live pass**, and
+**what comes next**. It is ordered by priority, not by date. There are no promised release dates
 here; a version ships when its gates pass.
 
 Status legend:
 
-- **Shipped** — in the v0.1.0 release and covered by the release notes.
-- **In-flight** — on `main`, usable in a development build, but not part of v0.1.0 and still subject
-  to change.
+- **Shipped** — in the v0.1.0 or v0.2.0 release and covered by the release notes.
+- **Needs a live pass** — implemented, unit/fixture-tested and visible in the app, but not yet
+  exercised against a real account, store client or controller on the development machine.
 - **Next** — not implemented yet. Ordered by what most improves trust in the current product.
 - **Candidate** — deliberately parked. Not a commitment.
 
@@ -31,27 +31,24 @@ Status legend:
 
 ---
 
-## 2. In-flight on `main`
+## 2. Shipped in v0.2.0
 
-These features are already implemented on `main` and appear in development builds, but the changelog
-keeps them under `[Unreleased]`. They are **not** part of the v0.1.0 release and their UI or command
-names may still change.
-
-| Work | State | What remains before it can ship |
+| Work | What shipped | Remaining validation |
 | --- | --- | --- |
-| **Owned Steam catalog** | Local `localconfig.vdf` catalog merged with installed games; owned-only entries get `steam://install/<appid>`. The development machine exposes 114 owned Steam apps. | Decide the release boundary, verify against a second Steam account, and document the local-data limits. |
-| **Playtime** | Total minutes, last-two-weeks minutes and last-played timestamps, joined by game id. | Verify formatting across zero/unknown values and large libraries; decide whether the two-week value gets its own UI. |
-| **Opt-in metadata sync** | User-triggered WinHTTP sync writes a filtered name cache; failed sync keeps the old cache. | Keep the core-library network guarantee (one explicit sync), add a clear first-run explanation, and verify the fallback endpoint over time. |
-| **PS5-style Home** | Hero banner, independently focusable media rows, row tiles, refined logo/boot animation and empty-library onboarding. | Finish the release-level visual pass, confirm controller focus order, and keep the reduced-motion path. |
-| **Search** | Dependency-free fuzzy overlay on `/` or `Ctrl+K`. | Verify large-library performance and keyboard/controller focus trapping. |
-| **Favorites** | Persisted ids shared by rows, tiles, detail and Settings. | Confirm removal/clear behavior and the empty Favorites state. |
-| **Steam library Settings card** | Catalog counts, cache age, Sync now and Rescan this PC. | Make the copy distinguish local catalog counts from the optional complete-library API. |
-| **Complete Steam library** | Optional Steam Web API key, DPAPI vault, six-hour cache, Settings card and library merge; API entries are marked installed/not installed correctly. | Validate with a real key and public profile; confirm privacy copy and stale-cache refresh behaviour. |
-| **SteamGridDB artwork** | Backend commands for search, validated download, local art cache and Steam `config/grid` writes; `ArtworkCard` is in Settings and `ArtPicker` opens from **Change artwork** on non-Steam detail pages. | Validate with a real key and cover the missing-shortcut, offline and rate-limit paths. |
+| **Owned Steam catalog** | Local `localconfig.vdf` catalog merged with installed games; owned-only entries get `steam://install/<appid>`. The development machine exposes 114 owned Steam apps. | Verify against a second Steam account. |
+| **Playtime** | Total minutes, last-two-weeks minutes and last-played timestamps, joined by game id and shown in rows and the detail page. | Verify very large libraries and unknown/zero values. |
+| **Opt-in metadata sync** | User-triggered WinHTTP sync writes a filtered name cache; a failed sync keeps the old cache. | Verify the fallback endpoint over time. |
+| **PS5-style Home** | Hero banner, independently focusable media rows, six filters, Continue Playing, section indicator, auto-scroll and empty-library onboarding. | Real controller pass for feel and focus order. |
+| **Search** | Dependency-free fuzzy overlay on `/` or `Ctrl+K`. | Large-library performance. |
+| **Favorites** | Persisted ids shared by rows, tiles, detail and Settings. | None outstanding. |
+| **Steam library Settings card** | Catalog counts, cache age, Sync now and Rescan this PC. | None outstanding. |
+| **Complete Steam library** | Optional Steam Web API key, DPAPI vault, six-hour cache, Settings card and library merge; API entries are marked installed/not installed correctly. | Validate with a real key and a public profile. |
+| **SteamGridDB artwork** | Backend search, validated download, local art cache and Steam `config/grid` writes; **Artwork** card in Settings and **Change artwork** on non-Steam detail pages. | Validate with a real key and the missing-shortcut path. |
+| **Full-app colour schemes** | The accent retints surfaces, lines, focus rings, scrollbar, selection and a derived second hue; contrast-safe accent buttons. | None outstanding. |
+| **Controller navigation** | Section badge + accent bar, page auto-scroll, rail via Left/Start with d-pad and Back, focus/scroll on Settings and Detail. | Real Xbox/PlayStation pad pass. |
 
-The optional Steam Web API and SteamGridDB modules are now registered in the command surface. The
-Steam key card is mounted and merged into the library; the **Artwork** card and **Change artwork**
-picker are mounted too. Neither is part of v0.1.0, and both stay optional.
+The optional Steam Web API and SteamGridDB modules are registered in the command surface, mounted in
+Settings and merged into the library. Both stay optional and make no request until a key is saved.
 
 ---
 
