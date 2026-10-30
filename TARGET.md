@@ -726,3 +726,70 @@ ids and non-Steam ids still return the normal `Invalid` error.
   flow and depends on the OS protocol handler; it does not verify or wait for the install.
 - Windows-only, like the rest of the app: WinHTTP via FFI, `%APPDATA%` and Steam's registry
   detection.
+
+---
+
+## 16. SESSION I — PS5 LIBRARY SHELL, SEARCH, FAVORITES, STEAM MERGE
+
+Final pass: **2026-10-30**. Frontend-only: every edit is under `src/**` plus this section;
+`src-tauri/**` was not touched. Session H's four commands are consumed exactly as frozen in
+§3.3/§15, and both H commits (`737e5e8`, `7548bcf`) are already on `main`. No new npm or
+Cargo dependency. Steam was left running throughout.
+
+**Gates (all green):**
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | 0 errors, 0 warnings |
+| `npm run build` | **178.53 KB JS / 58.24 KB gzip**; 67.56 KB CSS / 12.35 KB gzip |
+| `npm run tauri build` | `kudos.exe` + `Kudos_0.1.0_x64-setup.exe` (1.43 MiB) |
+| Visual smoke | 12 PNGs at 1600×1000; latest re-run **PASS** — 0 console errors, 0 exceptions, 0 log errors |
+| JS budget | 58.24 KB gzip ≤ 150 KB |
+
+**Task board:**
+
+| ID | Change | Evidence |
+| --- | --- | --- |
+| I1 | **Merged library.** `get_steam_owned_games` + `list_games` are merged client-side, deduped by `id`, installed wins. Owned Steam entries get a “Not installed” badge and an Install action. | `library.svelte.ts`, `steam.ts`; mock = 22 games (8 installed + 14 owned), 13 Steam owned/not-installed; `sessionI-home-1600x1000.png` |
+| I2 | **Filters.** All six filters (All / Installed / Not installed / Steam / Epic / GOG) always visible with live counts; a store with 0 games shows `0` and a friendly empty state; choice persisted in `kudos.libraryFilter`. | `FilterBar.svelte`, `filter.ts`; DOM `All 22`, `Installed 8`, `Not installed 14`, `Steam 16`, `Epic 3`, `GOG 3`; `sessionI-home-not-installed-1600x1000.png` |
+| I3 | **Playtime.** Steam minutes map to tiles and detail (“22 h”, “120 h played · last played yesterday”, “75 h played · last played 2 days ago”); zero-minute rows render no time, never “0 h”. | `library.svelte.ts`, `RowTile.svelte`, `GameDetail.svelte`; DOM zero-hours regex check; installed/owned detail shots |
+| I4 | **PS5 home shell.** Fixed 390 px hero with focus parallax, kicker follows the active row, rows ordered Favorites → Continue playing → Recently played → Your library → In your Steam account; Up/Down rows, Left/Right tiles, Enter opens, Esc backs. | `Home.svelte`, `HeroBanner.svelte`, `MediaRow.svelte`; ArrowDown changed row, ArrowRight changed tile; `sessionI-home-focus-1600x1000.png` |
+| I5 | **Boot splash.** 600 ms vignette, fade at 330 ms, skippable by pointer/keyboard/wheel; reduced-motion removes animation. | `BootSplash.svelte`, `App.svelte`; painted capture `sessionI-boot-1600x1000.png` on the normal 600 ms path (smoke overrides `prefers-reduced-motion`), opacity 1, element gone after a normal reload; reduced-motion exits at 80 ms by design |
+| I6 | **Search.** `/` or Ctrl+K opens a native `dialog`, fuzzy scoring without new deps, arrows/Enter/Esc; Enter opens the detail page. | `SearchOverlay.svelte`, `search.svelte.ts`; typing “eld” returned Elden Ring / Skyrim / Witcher 3; `sessionI-search-1600x1000.png` |
+| I7 | **Favorites.** `F` toggles the focused tile, star button on detail, hold/right-click a tile; persisted in `kudos.favorites`; Favorites row sits first; Settings card removes one or clears all. | `favorites.svelte.ts`, `RowTile.svelte`, `GameDetail.svelte`, `Settings.svelte`; stored `["epic:ControlUltimate"]`; `sessionI-home-favorites-1600x1000.png`, `sessionI-settings-favorites-1600x1000.png` |
+| I8 | **Detail page.** Landscape Steam hero with portrait fallback, platform/size/playtime/achievements facts, favorite toggle, Play for installed, Install for owned, “Install through Steam” copy, Add to Steam/hide retained. | `GameDetail.svelte`, `art.ts`; 120 h + 11/42 on Elden Ring, 75 h + Install on Baldur's Gate 3; `sessionI-detail-installed-1600x1000.png`, `sessionI-detail-owned-1600x1000.png`, `sessionI-install-overlay-1600x1000.png` |
+| I9 | **Steam library card.** Settings shows status pill, apps in Steam, owned-not-installed, installed, cache age, and a user-triggered Sync now with progress, success toast and error text. | `SteamLibraryCard.svelte`, `Settings.svelte`, `library.svelte.ts`; 72 / 13 / 8 / “2h ago”, Syncing… → Fresh / Just now; `sessionI-settings-steam-1600x1000.png` |
+| I10 | **Onboarding + resilience.** True-zero library replaces rows/filters with “Sync Steam library” and the Epic/GOG note; every new command is feature-detected and a missing command silently falls back to installed-only; all four commands are mocked under `?mock=1`. | `Onboarding.svelte`, `api.ts`, `devMock.ts`; `?mock=1&empty=1` showed 0 rows/0 chips; `sessionI-onboarding-1600x1000.png` |
+
+**Mocked vs real.** All screenshots and DOM assertions use `?mock=1` with deterministic data
+(22 games, 8 installed, 72 Steam apps, 119 playtime rows). The production path invokes the
+four H commands through `api.ts`; they are registered in `lib.rs` and the `tauri build`
+above contains them. Real-machine command behaviour was verified by Session H (114 owned
+apps, 119 playtime rows, 395.0 h, 109-name sync); the real UI path was not re-screenshotted
+in this pass.
+
+**Screenshots** (`%TEMP%\opencode\kudos-shots`, all `sessionI-*`):
+`boot`, `home`, `home-focus`, `home-favorites`, `home-not-installed`, `search`,
+`detail-installed`, `detail-owned`, `install-overlay`, `settings-steam`,
+`settings-favorites`, `onboarding` — each `-1600x1000.png`.
+
+**Ownership note.** Session I edited frontend files previously owned by Sessions A/D
+(`App.svelte`, `Home.svelte`, `GameDetail.svelte`, `Settings.svelte`, `api.ts`, `art.ts`,
+`FilterBar.svelte`, `Icon.svelte`, `LaunchOverlay.svelte`, `devMock.ts`, `filter.ts`,
+`library.svelte.ts`) and added new `src/lib` modules/components. Those edits were made in
+the shared worktree as agreed for F/G; A/D owners should treat them as reviewed frontend
+work, not frozen contracts. No `src-tauri/**` file was changed.
+
+**Known limits.**
+
+- No physical controller was available; the preserved Session F keyboard/gamepad glyph
+  system was exercised with `?pad=keyboard` and the footer hints only.
+- Install is a mock overlay in the screenshots (`Opening Steam`). The real action opens
+  `steam://install/<appid>` and cannot be completed headlessly while Steam is running.
+- “Your library” and “In your Steam account” intentionally overlap in the All view because
+  the second row is the owned-but-uninstalled subset. Under Not installed the same subset
+  repeats; this is the fixed row model, not duplicate data.
+- Steam sync is manual with no TTL, matching H. A failed sync keeps the previous cache and
+  surfaces the backend error string in the card.
+- Boot capture required emulated `prefers-reduced-motion: no-preference`; on a machine with
+  reduced motion the splash removes itself at 80 ms by design.

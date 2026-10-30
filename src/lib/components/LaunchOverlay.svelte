@@ -10,9 +10,18 @@
   interface Props {
     active: boolean;
     title?: string;
+    /** Eyebrow over the title: "Launching" or "Opening Steam". */
+    label?: string;
+    /** Supporting line under the title. */
+    hint?: string;
   }
 
-  let { active, title = "" }: Props = $props();
+  let {
+    active,
+    title = "",
+    label = "Launching",
+    hint = "Handing over to the game window",
+  }: Props = $props();
 </script>
 
 {#if active}
@@ -24,9 +33,9 @@
   >
     <div class="core">
       <Spinner size={30} />
-      <p class="eyebrow">Launching</p>
+      <p class="eyebrow">{label}</p>
       {#if title}<h2>{title}</h2>{/if}
-      <p class="hint">Handing over to the game window</p>
+      <p class="hint">{hint}</p>
     </div>
   </div>
 {/if}

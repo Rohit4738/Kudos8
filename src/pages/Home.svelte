@@ -1,40 +1,69 @@
 <!--
   HOME / LIBRARY
-  PS5-style horizontal rail, browse-before-commit info panel, keyboard + gamepad.
-  OWNER: Session D.
+  PS5-style hero + independently focusable rows. Vertical focus model:
+  Up/Down between rows, Left/Right inside a row, Enter opens, Esc backs out.
+  OWNER: Session D / Session I (PS5 redesign).
 -->
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import { fade } from "svelte/transition";
   import { coverSource, placeholderBackground } from "../lib/art";
-  import { FILTERS, matchesFilter, type Filter, type FilterCounts } from "../lib/filter";
+  import {
+    countFilters,
+    matchesFilter,
+    readStoredFilter,
+    resolveFilter,
+    storeFilter,
+    visibleFilters,
+    type Filter,
+  } from "../lib/filter";
+  import { favorites, toggleFavorite } from "../lib/favorites.svelte";
+  import { loadRecent, recent } from "../lib/history.svelte";
+  import { armIdleWatcher } from "../lib/idle.svelte";
   import {
     hideGame as hideLibraryGame,
     isHidden,
     library,
     libraryPrefs,
     loadLibrary,
+    playtimeFor,
     sortGames,
+    syncSteamLibrary,
   } from "../lib/library.svelte";
-  import { armIdleWatcher } from "../lib/idle.svelte";
+  import { relativePlayed, resolveRecent } from "../lib/recent";
   import { navigate } from "../lib/router.svelte";
-  import { applyStoredAccent, readCrossfade, storedBackground } from "../lib/theme";
+  import { openSearch, searchState } from "../lib/search.svelte";
+  import { playtimeLabel, playtimeSummary, relativeLong } from "../lib/steam";
+  import { applyStoredAccent, storedBackground } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
   import { onGamepad } from "../lib/gamepad";
+  import { humanError } from "../lib/format";
+  import { recordLaunch } from "../lib/history.svelte";
+  import { launchGame } from "../lib/api";
   import { restoreFullscreenPref } from "../lib/windowPrefs";
-  import { PLATFORM_LABEL, type Game, type Platform } from "../lib/types";
+  import { PLATFORM_LABEL, type Game } from "../lib/types";
   import ControlHint from "../lib/components/ControlHint.svelte";
   import FilterBar from "../lib/components/FilterBar.svelte";
-  import GameTile from "../lib/components/GameTile.svelte";
+  import HeroBanner from "../lib/components/HeroBanner.svelte";
   import Icon from "../lib/components/Icon.svelte";
-  import InfoPanel from "../lib/components/InfoPanel.svelte";
-  import RecentlyPlayedRow from "../lib/components/RecentlyPlayedRow.svelte";
+  import LaunchOverlay from "../lib/components/LaunchOverlay.svelte";
+  import MediaRow from "../lib/components/MediaRow.svelte";
+  import Onboarding from "../lib/components/Onboarding.svelte";
   import Toaster from "../lib/components/Toaster.svelte";
 
   interface Ambient {
     key: string;
     image: string | null;
     background: string;
+  }
+
+  interface HomeRow {
+    key: string;
+    title: string;
+    subtitle: string;
+    items: Game[];
+    size: "lg" | "md" | "sm";
+    meta: (game: Game) => string;
   }
 
   function ambientFor(game: Game | null): Ambient {
@@ -55,8 +84,6 @@
     };
   }
 
-  const greeting = greetingFor(new Date().getHours());
-
   function greetingFor(hour: number): string {
     if (hour < 5) return "Still up?";
     if (hour < 12) return "Good morning";
@@ -76,63 +103,186 @@
     );
   }
 
-  function isInteractiveTarget(target: EventTarget | null): boolean {
-    const element = target as HTMLElement | null;
-    if (!element) return false;
-    return (
-      element.tagName === "BUTTON" ||
-      element.tagName === "A" ||
-      element.tagName === "INPUT" ||
-      element.tagName === "TEXTAREA" ||
-      element.tagName === "SELECT" ||
-      element.isContentEditable
-    );
-  }
+  const greeting = greetingFor(new Date().getHours());
 
-  let filter = $state<Filter>("all");
-  let activeIndex = $state(0);
-  let offset = $state(0);
+  let filter = $state<Filter>(readStoredFilter());
+  let rowIndex = $state(0);
+  let colIndex = $state(0);
   let background = $state(storedBackground());
-  const crossfade = readCrossfade();
-
-  let viewport = $state<HTMLDivElement | null>(null);
-  let track = $state<HTMLDivElement | null>(null);
-  let resizeFrame = 0;
-  let ambientTimer: ReturnType<typeof setTimeout> | undefined;
+  let launching = $state<Game | null>(null);
+  let launchMode = $state<"play" | "install">("play");
 
   let ambientSnapshot = ambientFor(null);
   let ambient = $state<Ambient>(ambientSnapshot);
   let ambientPrev = $state<Ambient | null>(null);
+  let ambientTimer: ReturnType<typeof setTimeout> | undefined;
 
   const shown = $derived(library.games.filter((game) => !isHidden(game.id)));
   const hiddenCount = $derived(library.games.length - shown.length);
+  const counts = $derived(countFilters(shown));
+  const activeFilter = $derived(resolveFilter(filter, counts));
   const visible = $derived(
     sortGames(
-      shown.filter((game) => matchesFilter(game.platform, filter)),
+      shown.filter((game) => matchesFilter(game, activeFilter)),
       libraryPrefs.sort,
     ),
   );
-  const active = $derived(
-    visible.length === 0 ? 0 : Math.min(activeIndex, visible.length - 1),
-  );
-  const selected = $derived(visible[active] ?? null);
-  const counts = $derived<FilterCounts>({
-    all: shown.length,
-    steam: shown.filter((game) => game.platform === "steam").length,
-    epic: shown.filter((game) => game.platform === "epic").length,
-    gog: shown.filter((game) => game.platform === "gog").length,
+
+  const favoriteGames = $derived.by(() => {
+    const byId = new Map(shown.map((game) => [game.id, game]));
+    const picked: Game[] = [];
+    for (const id of favorites.ids) {
+      const game = byId.get(id);
+      if (game && matchesFilter(game, activeFilter)) picked.push(game);
+    }
+    return picked;
   });
+
+  const recentItems = $derived(resolveRecent(recent.entries, visible));
+
+  const continueItems = $derived.by(() => {
+    const fromRecent = recentItems.map((item) => item.game).filter((game) => game.isInstalled);
+    if (fromRecent.length > 0) return fromRecent.slice(0, 8);
+
+    return visible
+      .filter((game) => game.isInstalled && (playtimeFor(game.id)?.minutes ?? 0) > 0)
+      .sort((a, b) => (playtimeFor(b.id)?.minutes ?? 0) - (playtimeFor(a.id)?.minutes ?? 0))
+      .slice(0, 8);
+  });
+
+  function metaPlaytime(game: Game): string {
+    return playtimeLabel(playtimeFor(game.id)?.minutes);
+  }
+
+  function metaContinue(game: Game): string {
+    const entry = recent.entries.find((item) => item.id === game.id);
+    const played = playtimeLabel(playtimeFor(game.id)?.minutes);
+    if (played && entry) return `${played} · ${relativePlayed(entry.lastPlayedUnix)}`;
+    return played || (entry ? relativePlayed(entry.lastPlayedUnix) : "");
+  }
+
+  function metaRecent(game: Game): string {
+    const entry = recent.entries.find((item) => item.id === game.id);
+    if (entry) return relativePlayed(entry.lastPlayedUnix);
+    return playtimeLabel(playtimeFor(game.id)?.minutes);
+  }
+
+  function metaOwned(game: Game): string {
+    return playtimeLabel(playtimeFor(game.id)?.minutes);
+  }
+
+  const rows = $derived.by(() => {
+    const list: HomeRow[] = [];
+
+    if (favoriteGames.length > 0) {
+      list.push({
+        key: "favorites",
+        title: "Favorites",
+        subtitle: "Pinned by you",
+        items: favoriteGames,
+        size: "md",
+        meta: metaPlaytime,
+      });
+    }
+
+    if (continueItems.length > 0) {
+      list.push({
+        key: "continue",
+        title: "Continue playing",
+        subtitle: "Recent sessions and hours played",
+        items: continueItems,
+        size: "lg",
+        meta: metaContinue,
+      });
+    }
+
+    if (recentItems.length > 0) {
+      list.push({
+        key: "recent",
+        title: "Recently played",
+        subtitle: "Newest first",
+        items: recentItems.map((item) => item.game),
+        size: "sm",
+        meta: metaRecent,
+      });
+    }
+
+    if (visible.length > 0) {
+      list.push({
+        key: "library",
+        title: "Your library",
+        subtitle: `${counts.installed} installed · ${counts["not-installed"]} not installed`,
+        items: visible,
+        size: "md",
+        meta: metaPlaytime,
+      });
+    }
+
+    const owned = visible.filter(
+      (game) => !game.isInstalled && game.platform === "steam",
+    );
+    if (owned.length > 0) {
+      list.push({
+        key: "steam-account",
+        title: "In your Steam account",
+        subtitle: "Owned · installs through Steam",
+        items: owned,
+        size: "md",
+        meta: metaOwned,
+      });
+    }
+
+    return list;
+  });
+
+  const rowCursor = $derived(rows.length === 0 ? 0 : Math.min(rowIndex, rows.length - 1));
+  const activeRow = $derived(rows[rowCursor] ?? null);
+  const colCursor = $derived(
+    activeRow && activeRow.items.length > 0
+      ? Math.min(colIndex, activeRow.items.length - 1)
+      : 0,
+  );
+  const focused = $derived(activeRow?.items[colCursor] ?? null);
+  const favoriteSet = $derived(new Set(favorites.ids));
+  const heroKicker = $derived.by(() => {
+    switch (activeRow?.key) {
+      case "favorites":
+        return "Favorite";
+      case "recent":
+        return "Recently played";
+      case "library":
+        return "Your library";
+      case "steam-account":
+        return "In your Steam account";
+      default:
+        return "Continue playing";
+    }
+  });
+
+  const focusedMeta = $derived.by(() => {
+    if (!focused) return "";
+    const playtime = playtimeFor(focused.id);
+    const entry = recent.entries.find((item) => item.id === focused.id);
+    const last = entry?.lastPlayedUnix ?? playtime?.lastPlayed ?? null;
+    const summary = playtimeSummary(playtime?.minutes, last);
+    if (summary) return summary;
+    if (!focused.isInstalled) return "Owned in your Steam library — not downloaded on this PC.";
+    return "";
+  });
+
+  const trulyEmpty = $derived(
+    library.status === "ready" && library.games.length === 0,
+  );
   const allHidden = $derived(library.games.length > 0 && shown.length === 0);
-  const emptyCopy = $derived(
-    allHidden && filter === "all"
-      ? "Every game is hidden. Unhide games in Settings, or use the hidden count in the header to review them."
-      : filter === "all"
-        ? "Kudos looks for Steam, Epic and GOG games on this PC. If a store client is not installed, its games simply do not appear here."
-        : `No ${PLATFORM_LABEL[filter as Platform]} games found. That store may not be installed on this PC, or it has no games installed yet.`,
+  const filterEmpty = $derived(
+    !trulyEmpty &&
+      !allHidden &&
+      library.games.length > 0 &&
+      rows.length === 0,
   );
 
   $effect(() => {
-    const next = ambientFor(selected);
+    const next = ambientFor(focused);
     if (next.key === ambientSnapshot.key) return;
 
     ambientPrev = ambientSnapshot;
@@ -150,106 +300,154 @@
     void restoreFullscreenPref();
     void refreshLibrary();
 
-    const observer = new ResizeObserver(onResize);
-    if (viewport) observer.observe(viewport);
-
     const stopGamepad = onGamepad(handlePad);
     const stopIdle = armIdleWatcher();
 
     return () => {
-      observer.disconnect();
       stopGamepad();
       stopIdle();
-      cancelAnimationFrame(resizeFrame);
       if (ambientTimer) clearTimeout(ambientTimer);
     };
   });
 
   async function refreshLibrary(force = false): Promise<void> {
-    activeIndex = 0;
-    offset = 0;
-    await loadLibrary(force);
-    await tick();
-    centerOn(0);
-  }
-
-  function centerOn(index: number): void {
-    if (!viewport || !track) return;
-    const tile = track.children[index] as HTMLElement | undefined;
-    if (!tile) {
-      offset = 0;
-      return;
-    }
-    const next = tile.offsetLeft + tile.offsetWidth / 2 - viewport.clientWidth / 2;
-    offset = Number.isFinite(next) ? Math.max(0, next) : 0;
-  }
-
-  function onResize(): void {
-    cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(() => centerOn(active));
+    rowIndex = 0;
+    colIndex = 0;
+    await Promise.allSettled([loadLibrary(force), loadRecent(true)]);
   }
 
   function setFilter(next: Filter): void {
-    if (next === filter) return;
     filter = next;
-    activeIndex = 0;
-    offset = 0;
+    storeFilter(next);
+    rowIndex = 0;
+    colIndex = 0;
   }
 
   function cycleFilter(direction: 1 | -1): void {
-    const index = FILTERS.findIndex((entry) => entry.id === filter);
-    const next = FILTERS[(index + direction + FILTERS.length) % FILTERS.length];
+    const defs = visibleFilters(counts);
+    const index = defs.findIndex((entry) => entry.id === activeFilter);
+    const next = defs[(index + direction + defs.length) % defs.length];
     if (next) setFilter(next.id);
   }
 
-  function step(delta: 1 | -1): void {
-    if (visible.length === 0) return;
-    const next = (active + delta + visible.length) % visible.length;
-    activeIndex = next;
-    centerOn(next);
+  function focusTile(nextRow: number, nextCol: number): void {
+    rowIndex = nextRow;
+    colIndex = nextCol;
   }
 
-  function select(index: number): void {
-    // Mouse hover browses in place: the rail only glides for controller input.
-    activeIndex = index;
+  function moveRow(delta: 1 | -1): void {
+    if (rows.length === 0) return;
+    const next = (rowCursor + delta + rows.length) % rows.length;
+    rowIndex = next;
+    colIndex = Math.min(colCursor, Math.max(0, rows[next].items.length - 1));
+  }
+
+  function moveCol(delta: 1 | -1): void {
+    if (!activeRow || activeRow.items.length === 0) return;
+    colIndex = (colCursor + delta + activeRow.items.length) % activeRow.items.length;
   }
 
   function openGame(game: Game): void {
     navigate({ name: "game", id: game.id });
   }
 
-  async function hideSelected(game: Game): Promise<void> {
-    hideLibraryGame(game.id);
+  function toggleFav(game: Game): void {
+    const added = toggleFavorite(game.id);
+    pushToast(
+      "info",
+      added ? "Added to favorites" : "Removed from favorites",
+      added ? `“${game.title}” now sits at the top of your library.` : `“${game.title}” left your favorites.`,
+    );
+  }
+
+  function hideFocused(): void {
+    if (!focused) return;
+    hideLibraryGame(focused.id);
     pushToast(
       "info",
       "Hidden from library",
-      `“${game.title}” is hidden. Unhide it from Settings at any time.`,
+      `“${focused.title}” is hidden. Unhide it from Settings at any time.`,
     );
-    await tick();
-    centerOn(active);
+  }
+
+  async function runPrimary(game: Game): Promise<void> {
+    if (launching) return;
+    const installing = !game.isInstalled;
+    if (installing && game.platform !== "steam") {
+      openGame(game);
+      return;
+    }
+
+    launching = game;
+    launchMode = installing ? "install" : "play";
+    const started = performance.now();
+    let failure: string | null = null;
+
+    try {
+      if (library.usingMock) {
+        await wait(1150);
+      } else {
+        await launchGame(game.id);
+        if (!installing) recordLaunch(game.id);
+      }
+    } catch (error) {
+      failure = humanError(error);
+    }
+
+    await waitAtLeast(started, failure ? 600 : 1000);
+    launching = null;
+
+    if (failure) {
+      pushToast("error", installing ? "Couldn't open Steam" : "Couldn't launch", failure);
+    } else if (installing) {
+      pushToast(
+        "info",
+        "Steam install dialog opened",
+        `Approve “${game.title}” in Steam. Kudos will pick it up after it finishes installing.`,
+      );
+    } else if (library.usingMock) {
+      pushToast(
+        "info",
+        "Preview mode",
+        "Launching is simulated with mock data. The real app hands off to the game window.",
+      );
+    }
+  }
+
+  async function onboardingSync(): Promise<void> {
+    const ok = await syncSteamLibrary();
+    if (!ok) await loadLibrary(true);
   }
 
   function handlePad(action: string): void {
     switch (action) {
       case "left":
-        step(-1);
+        moveCol(-1);
         break;
       case "right":
-        step(1);
+        moveCol(1);
         break;
       case "up":
+        moveRow(-1);
+        break;
+      case "down":
+        moveRow(1);
+        break;
       case "tabLeft":
         cycleFilter(-1);
         break;
-      case "down":
       case "tabRight":
         cycleFilter(1);
         break;
-      case "confirm": {
-        const game = visible[active];
-        if (game) openGame(game);
+      case "confirm":
+        if (focused) openGame(focused);
         break;
-      }
+      case "secondary":
+        if (focused) toggleFav(focused);
+        break;
+      case "back":
+        if (activeFilter !== "all") setFilter("all");
+        break;
       case "menu":
         navigate({ name: "settings" });
         break;
@@ -258,6 +456,7 @@
 
   function onKeydown(event: KeyboardEvent): void {
     if (
+      searchState.open ||
       event.defaultPrevented ||
       event.ctrlKey ||
       event.metaKey ||
@@ -271,48 +470,93 @@
       case "arrowleft":
       case "a":
         event.preventDefault();
-        step(-1);
+        moveCol(-1);
         break;
       case "arrowright":
       case "d":
         event.preventDefault();
-        step(1);
+        moveCol(1);
         break;
       case "arrowup":
       case "w":
         event.preventDefault();
-        cycleFilter(-1);
+        moveRow(-1);
         break;
       case "arrowdown":
       case "s":
         event.preventDefault();
-        cycleFilter(1);
+        moveRow(1);
         break;
       case "home":
-        if (visible.length > 0) {
+        if (activeRow) {
           event.preventDefault();
-          activeIndex = 0;
-          centerOn(0);
+          colIndex = 0;
         }
         break;
       case "end":
-        if (visible.length > 0) {
+        if (activeRow) {
           event.preventDefault();
-          const last = visible.length - 1;
-          activeIndex = last;
-          centerOn(last);
+          colIndex = Math.max(0, activeRow.items.length - 1);
         }
         break;
       case "enter":
       case " ":
-        if (isInteractiveTarget(event.target)) return;
-        if (selected) {
+        if (focused) {
           event.preventDefault();
-          openGame(selected);
+          openGame(focused);
+        }
+        break;
+      case "p":
+        if (focused) {
+          event.preventDefault();
+          void runPrimary(focused);
+        }
+        break;
+      case "f":
+        if (focused) {
+          event.preventDefault();
+          toggleFav(focused);
+        }
+        break;
+      case "h":
+        if (focused) {
+          event.preventDefault();
+          hideFocused();
+        }
+        break;
+      case "[":
+        event.preventDefault();
+        cycleFilter(-1);
+        break;
+      case "]":
+        event.preventDefault();
+        cycleFilter(1);
+        break;
+      case "escape":
+        if (activeFilter !== "all") {
+          event.preventDefault();
+          setFilter("all");
         }
         break;
     }
   }
+
+  function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function waitAtLeast(started: number, ms: number): Promise<void> {
+    const remaining = ms - (performance.now() - started);
+    if (remaining > 0) await wait(remaining);
+  }
+
+  const emptyFilterCopy = $derived(
+    activeFilter === "installed"
+      ? "Nothing installed matches this filter yet. Switch to All to see the rest of your Steam account."
+      : activeFilter === "not-installed"
+        ? "Everything in your library is installed. Nice."
+        : `No ${PLATFORM_LABEL[activeFilter as keyof typeof PLATFORM_LABEL] ?? ""} games found. That store may not be installed on this PC, or it has no games.`,
+  );
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -333,19 +577,26 @@
 
   <header class="head">
     <div class="head-copy">
-      <p class="eyebrow">Kudos</p>
-      <h1>{greeting}</h1>
+      <p class="eyebrow">Kudos · {greeting}</p>
+      <h1>Your library</h1>
     </div>
 
     <div class="head-side">
       {#if library.usingMock}
         <span
           class="demo"
-          title="Preview data. Add ?mock=1 by hand to simulate a library; omit it to use the real list_games command."
+          title="Preview data. Add ?mock=1 by hand to simulate a library; omit it to use the real commands."
         >
           Preview data
         </span>
       {/if}
+
+      {#if library.syncStatus?.appCount}
+        <span class="owned-chip" title="Apps known from your Steam account">
+          {library.syncStatus.appCount} in Steam
+        </span>
+      {/if}
+
       <span class="libcount">
         {#if library.status === "loading" && library.games.length === 0}
           Scanning…
@@ -354,6 +605,7 @@
           {shown.length === 1 ? "game" : "games"}
         {/if}
       </span>
+
       {#if hiddenCount > 0}
         <button
           type="button"
@@ -364,111 +616,133 @@
           {hiddenCount} hidden
         </button>
       {/if}
+
+      <button type="button" class="search-btn" onclick={openSearch} title="Search (Ctrl+K or /)">
+        <Icon name="search" size={15} />
+        <span>Search</span>
+        <kbd>/</kbd>
+      </button>
     </div>
   </header>
 
-  <RecentlyPlayedRow games={library.games} onOpen={openGame} />
-
-  <FilterBar value={filter} {counts} onChange={setFilter} />
-
-  <div class="rail-viewport" bind:this={viewport}>
-    {#if library.status === "loading" && library.games.length === 0}
-      <div class="skeleton-track" aria-hidden="true">
-        {#each Array(6) as _, index (index)}
-          <div class="skeleton-tile" style:animation-delay={`${index * 80}ms`}>
-            <span class="skeleton-cover"></span>
-            <span class="skeleton-line"></span>
-          </div>
-        {/each}
+  {#if library.status === "loading" && library.games.length === 0}
+    <div class="skeleton-hero" aria-hidden="true"></div>
+    <div class="skeleton-row" aria-hidden="true">
+      {#each Array(5) as _, index (index)}
+        <span class="skeleton-tile" style:animation-delay={`${index * 80}ms`}></span>
+      {/each}
+    </div>
+  {:else if library.status === "error" && library.games.length === 0}
+    <div class="state-card" in:fade={{ duration: 220 }}>
+      <span class="state-icon danger"><Icon name="alert" size={22} /></span>
+      <div class="state-copy">
+        <h2>Couldn't read your library</h2>
+        <p>{library.error}</p>
       </div>
-    {:else if library.status === "error" && library.games.length === 0}
-      <div class="state-card" in:fade={{ duration: 220 }}>
-        <span class="state-icon danger"><Icon name="alert" size={22} /></span>
-        <div class="state-copy">
-          <h2>Couldn't read your library</h2>
-          <p>{library.error}</p>
-        </div>
-        <button type="button" class="state-action" onclick={() => void refreshLibrary(true)}>
-          <Icon name="refresh" size={15} />
-          Retry
-        </button>
+      <button type="button" class="state-action" onclick={() => void refreshLibrary(true)}>
+        <Icon name="refresh" size={15} />
+        Retry
+      </button>
+    </div>
+  {:else if trulyEmpty}
+    <Onboarding
+      syncing={library.syncState === "syncing"}
+      scanning={library.status === "loading"}
+      note={library.syncError ?? ""}
+      onSync={() => void onboardingSync()}
+      onRefresh={() => void refreshLibrary(true)}
+    />
+  {:else if allHidden}
+    <div class="state-card" in:fade={{ duration: 220 }}>
+      <span class="state-icon"><Icon name="hide" size={22} /></span>
+      <div class="state-copy">
+        <h2>Every game is hidden</h2>
+        <p>
+          Hidden games stay installed and launchable. Review the {hiddenCount} hidden
+          {hiddenCount === 1 ? "game" : "games"} in Settings, or unhide everything.
+        </p>
       </div>
-    {:else if visible.length === 0}
+      <button type="button" class="state-action" onclick={() => navigate({ name: "settings" })}>
+        <Icon name="sliders" size={15} />
+        Manage hidden games
+      </button>
+    </div>
+  {:else}
+    {#if focused}
+      <HeroBanner
+        game={focused}
+        meta={focusedMeta}
+        kicker={heroKicker}
+        playtime={playtimeFor(focused.id)}
+        favorite={favoriteSet.has(focused.id)}
+        busy={launching?.id === focused.id}
+        onPrimary={(game) => void runPrimary(game)}
+        onDetails={openGame}
+        onFavorite={toggleFav}
+      />
+    {/if}
+
+    <FilterBar value={activeFilter} {counts} onChange={setFilter} />
+
+    {#if filterEmpty}
       <div class="state-card" in:fade={{ duration: 220 }}>
         <span class="state-icon"><Icon name="library" size={22} /></span>
         <div class="state-copy">
-          <h2>No games found</h2>
-          <p>{emptyCopy}</p>
+          <h2>No games in this filter</h2>
+          <p>{emptyFilterCopy}</p>
         </div>
-        {#if allHidden && filter === "all"}
-          <button type="button" class="state-action" onclick={() => navigate({ name: "settings" })}>
-            <Icon name="sliders" size={15} />
-            Manage hidden games
-          </button>
-        {:else if filter === "all"}
-          <button type="button" class="state-action" onclick={() => void refreshLibrary(true)}>
-            <Icon name="refresh" size={15} />
-            Refresh
-          </button>
-        {:else}
-          <button type="button" class="state-action" onclick={() => setFilter("all")}>
-            <Icon name="library" size={15} />
-            Show all games
-          </button>
-        {/if}
+        <button type="button" class="state-action" onclick={() => setFilter("all")}>
+          <Icon name="library" size={15} />
+          Show all games
+        </button>
       </div>
     {:else}
-      <div
-        class="rail-track"
-        bind:this={track}
-        style:transform={`translate3d(${-offset}px, 0, 0)`}
-      >
-        {#each visible as game, index (game.id)}
-          <GameTile
-            {game}
-            active={index === active}
-            index={index}
-            onSelect={select}
+      <div class="rows">
+        {#each rows as row, index (row.key)}
+          <MediaRow
+            title={row.title}
+            subtitle={row.subtitle}
+            items={row.items}
+            size={row.size}
+            active={index === rowCursor}
+            activeIndex={index === rowCursor ? colCursor : 0}
+            metaFor={row.meta}
+            favorites={favorites.ids}
+            onFocus={(next) => focusTile(index, next)}
             onOpen={openGame}
-            onHide={(hidden) => void hideSelected(hidden)}
+            onToggleFavorite={toggleFav}
           />
         {/each}
       </div>
     {/if}
-  </div>
 
-  <div class="lower">
-    {#if visible.length > 0}
-      <InfoPanel
-        game={selected}
-        index={active}
-        total={visible.length}
-        onOpen={openGame}
-        {crossfade}
-      />
-    {/if}
-  </div>
-
-  <footer class="hints">
-    <ControlHint action="dpad" keys="← →" label="Browse" />
-    <ControlHint action="dpad" keys="↑ ↓" label="Filter" />
-    <ControlHint action="confirm" keys="Enter" label="Open" />
-    <ControlHint action="back" keys="Esc" label="Back" />
-    <span class="hint subtle">Hold a tile or right-click to hide</span>
-  </footer>
+    <footer class="hints">
+      <ControlHint action="dpad" keys="↑ ↓" label="Rows" />
+      <ControlHint action="dpad" keys="← →" label="Browse" />
+      <ControlHint action="confirm" keys="Enter" label="Open" />
+      <ControlHint action="back" keys="Esc" label="Back" />
+      <span class="hint subtle"><kbd>P</kbd> Play / install</span>
+      <span class="hint subtle"><kbd>F</kbd> Favorite</span>
+      <span class="hint subtle hint-end">Hold or right-click a tile to favorite</span>
+    </footer>
+  {/if}
 </div>
 
+<LaunchOverlay
+  active={launching !== null}
+  title={launching?.title}
+  label={launchMode === "install" ? "Opening Steam" : "Launching"}
+  hint={launchMode === "install" ? "Approve the install in Steam" : "Handing over to the game window"}
+/>
 <Toaster />
 
 <style>
   .home {
-    --tile-w: calc(clamp(150px, 23vh, 280px) * var(--tile-scale, 1));
-    --tile-gap: calc(clamp(16px, 2vh, 26px) * var(--tile-scale, 1));
     position: relative;
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    gap: clamp(10px, 1.4vh, 18px);
+    gap: clamp(12px, 1.6vh, 20px);
     isolation: isolate;
   }
 
@@ -486,7 +760,7 @@
     inset: -8%;
     background-size: cover;
     background-position: center;
-    opacity: 0.6;
+    opacity: 0.52;
     animation: ambient-in 900ms var(--ease-out) both;
     will-change: opacity;
   }
@@ -495,8 +769,8 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    filter: blur(40px) saturate(1.3) brightness(0.66);
-    transform: scale(1.12);
+    filter: blur(46px) saturate(1.32) brightness(0.6);
+    transform: scale(1.14);
     opacity: 0.95;
   }
 
@@ -506,12 +780,12 @@
     background:
       linear-gradient(
         180deg,
-        rgba(5, 6, 10, 0.72) 0%,
-        rgba(5, 6, 10, 0.26) 34%,
-        rgba(5, 6, 10, 0.58) 74%,
-        rgba(5, 6, 10, 0.88) 100%
+        rgba(5, 6, 10, 0.74) 0%,
+        rgba(5, 6, 10, 0.3) 32%,
+        rgba(5, 6, 10, 0.64) 76%,
+        rgba(5, 6, 10, 0.9) 100%
       ),
-      radial-gradient(90% 70% at 50% 40%, transparent 20%, rgba(5, 6, 10, 0.42) 100%);
+      radial-gradient(90% 70% at 50% 40%, transparent 18%, rgba(5, 6, 10, 0.46) 100%);
   }
 
   @keyframes ambient-in {
@@ -519,7 +793,7 @@
       opacity: 0;
     }
     to {
-      opacity: 0.6;
+      opacity: 0.52;
     }
   }
 
@@ -531,11 +805,15 @@
     gap: 24px;
   }
 
+  .head-copy {
+    min-width: 0;
+  }
+
   .eyebrow {
-    margin: 0 0 7px;
-    font-size: 10px;
+    margin: 0 0 5px;
+    font-size: 9.5px;
     font-weight: 650;
-    letter-spacing: 0.24em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--accent);
   }
@@ -543,26 +821,28 @@
   h1 {
     margin: 0;
     font-family: var(--font-display);
-    font-size: clamp(30px, 4.6vh, 46px);
+    font-size: clamp(24px, 3.2vh, 34px);
     font-weight: 600;
     line-height: 1.02;
-    letter-spacing: -0.035em;
+    letter-spacing: -0.038em;
     color: var(--fg-0);
   }
 
   .head-side {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding-bottom: 5px;
+    gap: 9px;
+    padding-bottom: 2px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .demo {
-    padding: 5px 10px;
+    padding: 4px 9px;
     border-radius: 999px;
-    font-size: 9.5px;
-    font-weight: 650;
-    letter-spacing: 0.11em;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 13%, transparent);
@@ -570,30 +850,23 @@
     cursor: help;
   }
 
-  .libcount {
-    font-size: 12px;
+  .owned-chip,
+  .hidden-chip {
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     color: var(--fg-2);
+    background: rgba(255, 255, 255, 0.045);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
     font-variant-numeric: tabular-nums;
   }
 
-  .libcount strong {
-    color: var(--fg-0);
-    font-weight: 600;
-  }
-
   .hidden-chip {
-    padding: 5px 10px;
-    border-radius: 999px;
-    font-size: 9.5px;
-    font-weight: 650;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fg-2);
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     transition:
-      color var(--dur-fast) var(--ease-out),
-      transform var(--dur-fast) var(--ease-out);
+      color 160ms var(--ease-out),
+      transform 160ms var(--ease-out);
   }
 
   .hidden-chip:hover {
@@ -601,101 +874,101 @@
     transform: translateY(-1px);
   }
 
-  /* ---------- rail ---------- */
-  .rail-viewport {
-    position: relative;
-    display: flex;
+  .libcount {
+    font-size: 11px;
+    color: var(--fg-2);
+    font-variant-numeric: tabular-nums;
+    padding: 4px 2px;
+  }
+
+  .libcount strong {
+    color: var(--fg-0);
+    font-weight: 600;
+  }
+
+  .search-btn {
+    display: inline-flex;
     align-items: center;
-    min-height: calc(var(--tile-w) * 1.5 + 36px);
-    padding-block: 16px;
+    gap: 7px;
+    height: 32px;
+    padding: 0 9px 0 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 550;
+    color: var(--fg-2);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    transition:
+      color 160ms var(--ease-out),
+      transform 160ms var(--ease-out);
+  }
+
+  .search-btn:hover {
+    color: var(--fg-0);
+    transform: translateY(-1px);
+  }
+
+  kbd {
+    font-family: var(--font-ui);
+    font-size: 8.5px;
+    font-weight: 650;
+    color: var(--fg-2);
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 1px 4px;
+    line-height: 1.4;
+  }
+
+  /* ---------- rows / skeleton ---------- */
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(14px, 2.1vh, 24px);
+  }
+
+  .skeleton-hero {
+    height: clamp(310px, 39vh, 430px);
+    border-radius: clamp(20px, 2vw, 30px);
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+      var(--bg-2);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    animation: skeleton-pulse 1.7s ease-in-out infinite;
+  }
+
+  .skeleton-row {
+    display: flex;
+    gap: 16px;
     overflow: hidden;
-  }
-
-  .rail-viewport::before {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: min(64vw, 760px);
-    height: 78%;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    background: radial-gradient(
-      ellipse at center,
-      color-mix(in srgb, var(--accent) 17%, transparent) 0%,
-      transparent 68%
-    );
-    filter: blur(18px);
-    pointer-events: none;
-    opacity: 0.9;
-  }
-
-  .rail-track {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--tile-gap);
-    width: 100%;
-    padding-inline: calc(50% - var(--tile-w) / 2);
-    transform: translate3d(0, 0, 0);
-    transition: transform 540ms cubic-bezier(0.16, 1, 0.3, 1);
-    will-change: transform;
-  }
-
-  /* ---------- skeleton ---------- */
-  .skeleton-track {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--tile-gap);
-    width: 100%;
-    padding-inline: calc(50% - var(--tile-w) / 2);
   }
 
   .skeleton-tile {
     flex: 0 0 auto;
-    width: var(--tile-w);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    animation: skeleton-pulse 1.7s ease-in-out infinite;
-  }
-
-  .skeleton-cover {
-    display: block;
-    width: 100%;
+    width: clamp(126px, 14.5vh, 164px);
     aspect-ratio: 2 / 3;
-    border-radius: clamp(10px, 1vw, 16px);
+    border-radius: 14px;
     background:
-      linear-gradient(160deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.025)),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
       var(--bg-2);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-  }
-
-  .skeleton-line {
-    display: block;
-    width: 62%;
-    height: 9px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    animation: skeleton-pulse 1.7s ease-in-out infinite;
   }
 
   @keyframes skeleton-pulse {
     0%,
     100% {
-      opacity: 0.38;
+      opacity: 0.4;
     }
     50% {
-      opacity: 0.8;
+      opacity: 0.78;
     }
   }
 
   /* ---------- states ---------- */
   .state-card {
     width: 100%;
-    min-height: calc(var(--tile-w) * 1.12);
+    min-height: 170px;
     display: flex;
     align-items: center;
     gap: 18px;
@@ -705,6 +978,7 @@
       linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
     backdrop-filter: blur(18px);
+    flex-wrap: wrap;
   }
 
   .state-icon {
@@ -759,7 +1033,7 @@
     color: var(--fg-0);
     background: rgba(255, 255, 255, 0.08);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform 160ms var(--ease-out);
     will-change: transform;
   }
 
@@ -767,21 +1041,13 @@
     transform: translateY(-1px) scale(1.02);
   }
 
-  .state-action:active {
-    transform: scale(0.98);
-  }
-
-  /* ---------- lower ---------- */
-  .lower {
-    margin-top: auto;
-  }
-
+  /* ---------- footer ---------- */
   .hints {
     display: flex;
     align-items: center;
-    gap: 20px;
-    padding-top: 2px;
-    font-size: 10.5px;
+    gap: 18px;
+    padding-top: 4px;
+    font-size: 10px;
     color: var(--fg-2);
     flex-wrap: wrap;
   }
@@ -789,24 +1055,33 @@
   .hint {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     white-space: nowrap;
   }
 
   .hint.subtle {
-    margin-left: auto;
-    opacity: 0.7;
+    opacity: 0.78;
   }
 
-  @media (max-width: 860px) {
-    .home {
-      --tile-w: calc(clamp(136px, 20vh, 200px) * var(--tile-scale, 1));
+  .hint-end {
+    margin-left: auto;
+    opacity: 0.6;
+  }
+
+  @media (max-width: 900px) {
+    .head {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .head-side {
+      justify-content: flex-start;
     }
     .hint:nth-child(2) {
       display: none;
     }
-    .state-card {
-      flex-wrap: wrap;
+    .hint-end {
+      display: none;
     }
   }
 </style>

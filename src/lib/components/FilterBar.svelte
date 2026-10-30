@@ -1,7 +1,16 @@
-<!-- Store filter row. Active pill is an opacity layer, never a paint animation. -->
+<!--
+  Filter chips: All / Installed / Not installed + Steam / Epic / GOG, with live
+  counts. Empty stores stay visible at 0 and show a friendly empty state.
+  Active pill is an opacity layer, never a paint animation.
+  OWNER: Session D / I.
+-->
 <script lang="ts">
   import { platformDotColor } from "../art";
-  import { FILTERS, type Filter, type FilterCounts } from "../filter";
+  import {
+    visibleFilters,
+    type Filter,
+    type FilterCounts,
+  } from "../filter";
 
   interface Props {
     value: Filter;
@@ -10,23 +19,29 @@
   }
 
   let { value, counts, onChange }: Props = $props();
+
+  const defs = $derived(visibleFilters(counts));
+
+  function dotFor(id: Filter): string | null {
+    if (id === "steam" || id === "epic" || id === "gog") {
+      return platformDotColor(id);
+    }
+    return null;
+  }
 </script>
 
-<div class="filters" role="group" aria-label="Filter by store">
-  {#each FILTERS as filter (filter.id)}
+<div class="filters" role="group" aria-label="Filter library">
+  {#each defs as filter (filter.id)}
     <button
+      type="button"
       class="chip"
       class:active={value === filter.id}
       aria-pressed={value === filter.id}
       onclick={() => onChange(filter.id)}
     >
       <span class="chip-bg" aria-hidden="true"></span>
-      {#if filter.id !== "all"}
-        <span
-          class="dot"
-          style:background={platformDotColor(filter.id)}
-          aria-hidden="true"
-        ></span>
+      {#if dotFor(filter.id)}
+        <span class="dot" style:background={dotFor(filter.id)} aria-hidden="true"></span>
       {/if}
       <span class="label">{filter.label}</span>
       <span class="count" class:empty={counts[filter.id] === 0}>
@@ -41,24 +56,24 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
   }
 
   .chip {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    height: 34px;
-    padding: 0 14px;
+    gap: 7px;
+    height: 32px;
+    padding: 0 12px;
     border-radius: 999px;
     color: var(--fg-2);
-    font-size: 12.5px;
+    font-size: 11.5px;
     font-weight: 550;
     letter-spacing: 0.01em;
     white-space: nowrap;
     isolation: isolate;
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition: transform 160ms var(--ease-out);
     will-change: transform;
   }
 
@@ -80,14 +95,14 @@
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: rgba(255, 255, 255, 0.07);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
     opacity: 0;
-    transition: opacity var(--dur-med) var(--ease-out);
+    transition: opacity 220ms var(--ease-out);
   }
 
   .chip:hover .chip-bg {
-    opacity: 0.55;
+    opacity: 0.6;
   }
 
   .chip.active .chip-bg {
@@ -95,12 +110,12 @@
     background:
       linear-gradient(
         180deg,
-        color-mix(in srgb, var(--accent) 34%, transparent) 0%,
-        color-mix(in srgb, var(--accent) 18%, transparent) 100%
+        color-mix(in srgb, var(--accent) 32%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 15%, transparent) 100%
       );
     box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
-      0 6px 20px color-mix(in srgb, var(--accent) 18%, transparent);
+      inset 0 0 0 1px color-mix(in srgb, var(--accent) 52%, transparent),
+      0 6px 20px color-mix(in srgb, var(--accent) 16%, transparent);
   }
 
   .dot {
@@ -111,13 +126,13 @@
   }
 
   .count {
-    font-size: 10.5px;
+    font-size: 9.5px;
     font-variant-numeric: tabular-nums;
     color: var(--fg-2);
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.055);
     border-radius: 999px;
-    padding: 1px 6px;
-    min-width: 20px;
+    padding: 1px 5px;
+    min-width: 18px;
     text-align: center;
   }
 

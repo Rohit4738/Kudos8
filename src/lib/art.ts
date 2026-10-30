@@ -96,3 +96,36 @@ export function platformDotColor(platform: Platform): string {
       return "#c084fc";
   }
 }
+
+/** Steam's landscape hero art, derived from the stable id. */
+export function steamHeroUrl(id: string): string | null {
+  const appid = id.startsWith("steam:") ? id.slice(6) : "";
+  return /^\d+$/.test(appid)
+    ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/library_hero.jpg`
+    : null;
+}
+
+/**
+ * Hero candidate chain, best first. Steam gets the real landscape `library_hero`
+ * art; the portrait cover (often a local file) and the CDN header are graceful
+ * offline fallbacks. The caller walks the list on image errors.
+ */
+export function heroCandidates(game: Game): string[] {
+  const list: string[] = [];
+  const cover = coverSource(game.coverImage);
+
+  if (game.platform === "steam") {
+    const hero = steamHeroUrl(game.id);
+    if (hero) list.push(hero);
+    if (cover) list.push(cover);
+    const appid = game.id.startsWith("steam:") ? game.id.slice(6) : "";
+    if (/^\d+$/.test(appid)) {
+      list.push(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`);
+    }
+  } else if (cover) {
+    list.push(cover);
+  }
+
+  return [...new Set(list)];
+}
+

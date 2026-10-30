@@ -17,7 +17,12 @@
       | "refresh"
       | "trophy"
       | "hide"
-      | "eye";
+      | "eye"
+      | "search"
+      | "star"
+      | "star-fill"
+      | "download"
+      | "chevron";
     size?: number;
     stroke?: number;
   }
@@ -88,5 +93,21 @@
   {:else if name === "eye"}
     <path d="M3 12c1.5-2.8 4.6-5.8 9-5.8s7.5 3 9 5.8c-1.5 2.8-4.6 5.8-9 5.8S4.5 14.8 3 12Z" />
     <circle cx="12" cy="12" r="2.6" />
+  {:else if name === "search"}
+    <circle cx="11" cy="11" r="6.6" />
+    <path d="m16 16 4.4 4.4" />
+  {:else if name === "star"}
+    <path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.6Z" />
+  {:else if name === "star-fill"}
+    <path
+      d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.6Z"
+      fill="currentColor"
+    />
+  {:else if name === "download"}
+    <path d="M12 3.8v10.4" />
+    <path d="m7.6 10.2 4.4 4.4 4.4-4.4" />
+    <path d="M4.5 16.6v2.2a1.6 1.6 0 0 0 1.6 1.6h11.8a1.6 1.6 0 0 0 1.6-1.6v-2.2" />
+  {:else if name === "chevron"}
+    <path d="m6 9.5 6 6 6-6" />
   {/if}
 </svg>

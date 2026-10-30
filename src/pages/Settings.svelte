@@ -6,6 +6,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getSteamStatus } from "../lib/api";
+  import { clearFavorites, favorites, removeFavorite } from "../lib/favorites.svelte";
   import {
     controller,
     effectiveLayout,
@@ -60,11 +61,12 @@
     setBorderlessFullscreen,
     type StartupPage,
   } from "../lib/windowPrefs";
-  import type { SteamStatus } from "../lib/types";
+  import type { Game, SteamStatus } from "../lib/types";
   import Icon from "../lib/components/Icon.svelte";
   import IdleSettingsCard from "../lib/components/IdleSettings.svelte";
   import PadGlyph from "../lib/components/PadGlyph.svelte";
   import Spinner from "../lib/components/Spinner.svelte";
+  import SteamLibraryCard from "../lib/components/SteamLibraryCard.svelte";
   import Toaster from "../lib/components/Toaster.svelte";
 
   const desktop = isTauriRuntime();
@@ -83,6 +85,11 @@
 
   const hiddenGames = $derived(
     library.games.filter((game) => isHidden(game.id)),
+  );
+  const favoriteGames = $derived(
+    favorites.ids
+      .map((id) => library.games.find((game) => game.id === id))
+      .filter((game): game is Game => Boolean(game)),
   );
   const glyphLayout = $derived.by((): Exclude<PadLayout, "keyboard"> | null => {
     const layout = effectiveLayout();
@@ -386,6 +393,8 @@
       </div>
     </section>
 
+    <SteamLibraryCard />
+
     <IdleSettingsCard
       value={idlePrefs}
       onChange={(next) => updateIdlePrefs(next)}
@@ -486,6 +495,50 @@
         <button type="button" class="text-btn unhide-all" onclick={unhideAll}>
           <Icon name="refresh" size={14} />
           Unhide all
+        </button>
+      {/if}
+    </section>
+
+    <section class="card favorites-card">
+      <div class="card-head">
+        <span class="card-icon favorite">
+          <Icon name="star-fill" size={18} />
+        </span>
+        <div>
+          <h2>Favorites</h2>
+          <p>Pinned games stay in the Favorites row at the top of your library.</p>
+        </div>
+      </div>
+
+      {#if library.status === "loading" && favoriteGames.length === 0}
+        <div class="steam-loading">
+          <Spinner size={16} />
+          Reading your library…
+        </div>
+      {:else if favoriteGames.length === 0}
+        <p class="note">
+          No favorites yet. Press F on a game, hold a tile, right-click it, or use
+          the star on its detail page.
+        </p>
+      {:else}
+        <ul class="hidden-list favorites-list">
+          {#each favoriteGames as game (game.id)}
+            <li>
+              <span class="hidden-name" title={game.title}>{game.title}</span>
+              <button
+                type="button"
+                class="text-btn"
+                onclick={() => removeFavorite(game.id)}
+              >
+                <Icon name="star-fill" size={14} />
+                Remove
+              </button>
+            </li>
+          {/each}
+        </ul>
+        <button type="button" class="text-btn unhide-all" onclick={clearFavorites}>
+          <Icon name="close" size={14} />
+          Clear favorites
         </button>
       {/if}
     </section>
@@ -706,6 +759,12 @@
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 14%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+
+  .card-icon.favorite {
+    color: #ffd166;
+    background: rgba(255, 209, 102, 0.11);
+    box-shadow: inset 0 0 0 1px rgba(255, 209, 102, 0.24);
   }
 
   h2 {

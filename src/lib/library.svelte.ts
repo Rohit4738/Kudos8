@@ -1,13 +1,41 @@
-// Cached library store shared by Home and GameDetail.
-// OWNER: Session D. Talks to Tauri only through src/lib/api.ts.
+// Cached library store shared by Home, GameDetail and Settings.
+// OWNER: Session D / I. Talks to Tauri only through src/lib/api.ts.
+//
+// Session I: merges `list_games` with Session H's owned Steam catalogue,
+// joins playtime by game id and degrades gracefully when the new commands are
+// not registered yet (installed-only library, no raw IPC error in the UI).
 
-import { listGames } from "./api";
-import { DEV_GAMES, isDevMockEnabled } from "./devMock";
+import {
+  getSteamOwnedGames,
+  getSteamPlaytime,
+  getSteamSyncStatus,
+  isMissingCommand,
+  listGames,
+  syncSteamMetadata,
+} from "./api";
+import {
+  DEV_GAMES,
+  DEV_OWNED_GAMES,
+  DEV_PLAYTIME,
+  DEV_SYNC_STATUS,
+  isDevEmpty,
+  isDevMockEnabled,
+  mockSyncStatus,
+} from "./devMock";
 import { humanError } from "./format";
+import { isTauriRuntime } from "./art";
+import {
+  mergeOwnedGames,
+  toPlaytimeMap,
+  type SteamPlaytime,
+  type SteamSupport,
+  type SteamSyncStatus,
+} from "./steam";
 import type { Game } from "./types";
 
 export type LibraryStatus = "idle" | "loading" | "ready" | "error";
 export type SortMode = "title" | "platform" | "installed";
+export type SyncState = "idle" | "syncing" | "ready" | "error" | "unavailable";
 
 const SORT_KEY = "kudos.sort";
 const HIDDEN_KEY = "kudos.hiddenGames";
@@ -23,6 +51,14 @@ interface LibraryState {
   status: LibraryStatus;
   error: string | null;
   usingMock: boolean;
+  /** Steam playtime keyed by the namespaced game id. */
+  playtime: Record<string, SteamPlaytime>;
+  /** Latest sync cache status; null until the command answers. */
+  syncStatus: SteamSyncStatus | null;
+  steamState: SteamSupport;
+  steamError: string | null;
+  syncState: SyncState;
+  syncError: string | null;
 }
 
 export const library = $state<LibraryState>({
@@ -30,6 +66,12 @@ export const library = $state<LibraryState>({
   status: "idle",
   error: null,
   usingMock: false,
+  playtime: {},
+  syncStatus: null,
+  steamState: "unknown",
+  steamError: null,
+  syncState: "idle",
+  syncError: null,
 });
 
 let inFlight: Promise<void> | null = null;
@@ -49,6 +91,10 @@ function normalize(raw: Game | RawGame): Game {
   };
 }
 
+function byTitle(a: Game, b: Game): number {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+}
+
 export function loadLibrary(force = false): Promise<void> {
   if (inFlight) return inFlight;
   if (library.status === "ready" && !force) return Promise.resolve();
@@ -58,18 +104,30 @@ export function loadLibrary(force = false): Promise<void> {
 
   inFlight = (async () => {
     if (isDevMockEnabled()) {
-      await wait(260);
-      library.games = DEV_GAMES.map(normalize);
+      await wait(240);
+      const empty = isDevEmpty();
+      const installed = empty ? [] : DEV_GAMES.map(normalize);
+      const owned = empty ? [] : DEV_OWNED_GAMES.map(normalize);
+
+      library.games = mergeOwnedGames(installed, owned).sort(byTitle);
+      library.playtime = empty ? {} : toPlaytimeMap(DEV_PLAYTIME);
+      library.syncStatus = empty ? null : { ...DEV_SYNC_STATUS };
+      library.steamState = empty ? "unavailable" : "ready";
+      library.steamError = null;
+      library.syncState = empty ? "unavailable" : "ready";
+      library.syncError = null;
       library.usingMock = true;
       library.status = "ready";
       return;
     }
 
     try {
-      const games = await listGames();
-      library.games = games.map(normalize);
+      // Paint the installed library first; owned/playtime enrich it after.
+      const installed = (await listGames()).map(normalize);
+      library.games = installed.sort(byTitle);
       library.usingMock = false;
       library.status = "ready";
+      await hydrateSteam(installed);
     } catch (error) {
       library.games = [];
       library.usingMock = false;
@@ -81,6 +139,95 @@ export function loadLibrary(force = false): Promise<void> {
   });
 
   return inFlight;
+}
+
+/**
+ * Best-effort enrichment from the three additive H commands. A missing command
+ * (H not landed yet), a broken cache or an unreadable config all leave the
+ * installed-only library intact and never surface a raw error.
+ */
+async function hydrateSteam(installed: Game[]): Promise<void> {
+  if (!isTauriRuntime()) return;
+
+  const [ownedResult, playtimeResult, statusResult] = await Promise.allSettled([
+    getSteamOwnedGames(),
+    getSteamPlaytime(),
+    getSteamSyncStatus(),
+  ]);
+
+  let owned: Game[] = [];
+
+  if (ownedResult.status === "fulfilled") {
+    owned = ownedResult.value.map(normalize);
+    library.steamState = "ready";
+    library.steamError = null;
+  } else {
+    library.steamState = isMissingCommand(ownedResult.reason) ? "unavailable" : "fallback";
+    library.steamError = isMissingCommand(ownedResult.reason)
+      ? null
+      : humanError(ownedResult.reason);
+  }
+
+  if (owned.length > 0) {
+    // Rebuild from the installed snapshot so a forced refresh cannot duplicate
+    // or resurrect entries that the store no longer owns.
+    library.games = mergeOwnedGames(installed, owned).sort(byTitle);
+  }
+
+  if (playtimeResult.status === "fulfilled") {
+    library.playtime = toPlaytimeMap(playtimeResult.value);
+  }
+
+  if (statusResult.status === "fulfilled") {
+    library.syncStatus = statusResult.value;
+    if (library.steamState !== "ready") library.steamState = "ready";
+  }
+}
+
+/** Steam playtime for a game id, or null when never recorded. */
+export function playtimeFor(id: string): SteamPlaytime | null {
+  return library.playtime[id] ?? null;
+}
+
+/**
+ * User-triggered network sync from Settings. Returns true on success. The only
+ * network call in the app; never called on startup.
+ */
+export async function syncSteamLibrary(): Promise<boolean> {
+  if (library.syncState === "syncing") return false;
+  library.syncState = "syncing";
+  library.syncError = null;
+
+  if (isDevMockEnabled()) {
+    await wait(1150);
+    library.syncStatus = mockSyncStatus();
+    library.syncState = "ready";
+    return true;
+  }
+
+  if (!isTauriRuntime()) {
+    library.syncState = "unavailable";
+    library.syncError = "Steam library sync is available in the desktop app.";
+    return false;
+  }
+
+  try {
+    const status = await syncSteamMetadata();
+    library.syncStatus = status;
+    await loadLibrary(true);
+    library.syncState = "ready";
+    return true;
+  } catch (error) {
+    if (isMissingCommand(error)) {
+      library.syncState = "unavailable";
+      library.syncError =
+        "Steam library sync isn't available in this build. Installed games still work.";
+    } else {
+      library.syncState = "error";
+      library.syncError = humanError(error);
+    }
+    return false;
+  }
 }
 
 export function findGame(id: string): Game | null {

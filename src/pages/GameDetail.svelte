@@ -7,7 +7,8 @@
   import { onMount } from "svelte";
   import { addToSteam, getAchievements, launchGame } from "../lib/api";
   import { recordLaunch } from "../lib/history.svelte";
-  import { coverSource, placeholderBackground } from "../lib/art";
+  import { heroCandidates, placeholderBackground } from "../lib/art";
+  import { isFavorite, toggleFavorite } from "../lib/favorites.svelte";
   import {
     formatBytes,
     humanError,
@@ -22,9 +23,15 @@
     isHidden,
     library,
     loadLibrary,
+    playtimeFor,
     unhideGame,
   } from "../lib/library.svelte";
   import { back } from "../lib/router.svelte";
+  import {
+    isSteamOwnedGame,
+    playtimeSummary,
+    primaryActionLabel,
+  } from "../lib/steam";
   import { applyStoredAccent } from "../lib/theme";
   import { pushToast } from "../lib/toast.svelte";
   import type { AchievementSummary } from "../lib/types";
@@ -41,12 +48,36 @@
   type SteamState = "idle" | "loading" | "success" | "error";
 
   let launching = $state(false);
+  let launchMode = $state<"play" | "install">("play");
   let steamState = $state<SteamState>("idle");
   let steamError = $state<string | null>(null);
 
   const game = $derived(findGame(id));
   const hidden = $derived(game ? isHidden(game.id) : false);
-  const heroImage = $derived(game ? coverSource(game.coverImage) : null);
+  const favorite = $derived(game ? isFavorite(game.id) : false);
+  const playtime = $derived(game ? playtimeFor(game.id) : null);
+  const playedSummary = $derived(
+    playtime ? playtimeSummary(playtime.minutes, playtime.lastPlayed) : "",
+  );
+  const primaryLabel = $derived(game ? primaryActionLabel(game) : "Play");
+  const canLaunch = $derived(
+    game ? game.isInstalled || isSteamOwnedGame(game) : false,
+  );
+
+  const heroSources = $derived(game ? heroCandidates(game) : []);
+  let heroAttempt = $state(0);
+  let heroFailed = $state(false);
+  let heroFor = $state("");
+  const heroImage = $derived(heroFailed ? null : (heroSources[heroAttempt] ?? null));
+
+  $effect(() => {
+    const currentId = game?.id ?? "";
+    if (currentId === heroFor) return;
+    heroFor = currentId;
+    heroAttempt = 0;
+    heroFailed = false;
+  });
+
   const loading = $derived(library.status === "loading" && !game);
   const libraryError = $derived(library.status === "error" ? library.error : null);
 
@@ -115,12 +146,21 @@
     });
 
     function onKeydown(event: KeyboardEvent): void {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        isInteractiveTarget(event.target)
+      ) {
         return;
       }
-      if (event.key === "Enter" && !isInteractiveTarget(event.target) && game) {
+      if (event.key === "Enter" && game) {
         event.preventDefault();
         void play();
+      } else if (event.key.toLowerCase() === "f" && game) {
+        event.preventDefault();
+        toggleFav();
       }
     }
 
@@ -131,9 +171,28 @@
     };
   });
 
-  async function play(): Promise<void> {
-    if (!game || launching || !game.isInstalled) return;
+  function toggleFav(): void {
+    if (!game) return;
+    const added = toggleFavorite(game.id);
+    pushToast(
+      "info",
+      added ? "Added to favorites" : "Removed from favorites",
+      added
+        ? `“${game.title}” now sits at the top of your library.`
+        : `“${game.title}” left your favorites.`,
+    );
+  }
 
+  function onHeroError(): void {
+    if (heroAttempt < heroSources.length - 1) heroAttempt += 1;
+    else heroFailed = true;
+  }
+
+  async function play(): Promise<void> {
+    if (!game || launching || !canLaunch) return;
+
+    const installing = !game.isInstalled;
+    launchMode = installing ? "install" : "play";
     launching = true;
     const started = performance.now();
     let failure: string | null = null;
@@ -145,7 +204,7 @@
       } else {
         await launchGame(game.id);
         // Mirror the backend journal locally so the recent row moves immediately.
-        recordLaunch(game.id);
+        if (!installing) recordLaunch(game.id);
       }
     } catch (error) {
       failure = humanError(error);
@@ -155,7 +214,13 @@
     launching = false;
 
     if (failure) {
-      pushToast("error", "Couldn't launch", failure);
+      pushToast("error", installing ? "Couldn't open Steam" : "Couldn't launch", failure);
+    } else if (installing) {
+      pushToast(
+        "info",
+        "Steam install dialog opened",
+        `Approve “${game.title}” in Steam. Kudos will pick it up after it finishes installing.`,
+      );
     } else if (library.usingMock) {
       pushToast(
         "info",
@@ -259,7 +324,7 @@
     <article class="hero">
       <div class="hero-bg" style:background={placeholderBackground(game)}>
         {#if heroImage}
-          <img src={heroImage} alt="" draggable="false" />
+          <img src={heroImage} alt="" draggable="false" onerror={onHeroError} />
         {/if}
         <div class="hero-shade"></div>
       </div>
@@ -283,18 +348,42 @@
           <p class="summary">
             {game.isInstalled
               ? "Ready when you are."
-              : "In your library, not downloaded. Install it from your store to play."}
+              : isSteamOwnedGame(game)
+                ? "Owned in your Steam library. Install it through Steam and it appears here, ready to play."
+                : "In your library, not downloaded. Install it from your store to play."}
           </p>
+
+          {#if playedSummary}
+            <p class="played-line">{playedSummary}</p>
+          {/if}
 
           <div class="actions">
             <button
               type="button"
               class="play"
-              disabled={!game.isInstalled || launching}
+              disabled={!canLaunch || launching}
               onclick={() => void play()}
             >
-              <span class="play-icon"><Icon name="play" size={17} /></span>
-              {launching ? "Launching…" : game.isInstalled ? "Play" : "Not installed"}
+              <span class="play-icon">
+                <Icon name={game.isInstalled ? "play" : "download"} size={17} />
+              </span>
+              {launching
+                ? launchMode === "install"
+                  ? "Opening Steam…"
+                  : "Launching…"
+                : primaryLabel}
+            </button>
+
+            <button
+              type="button"
+              class="favorite-action"
+              class:on={favorite}
+              aria-pressed={favorite}
+              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+              onclick={toggleFav}
+            >
+              <Icon name={favorite ? "star-fill" : "star"} size={16} />
+              <span>{favorite ? "Favorited" : "Favorite"}</span>
             </button>
 
             {#if game.platform === "gog"}
@@ -336,7 +425,8 @@
           {/if}
 
           <p class="key-hint">
-            <ControlHint action="confirm" keys="Enter" label="Play" />
+            <ControlHint action="confirm" keys="Enter" label={primaryLabel} />
+            <ControlHint action="secondary" keys="F" label="Favorite" />
             {#if game.platform === "gog"}
               <ControlHint action="secondary" keys="X" label="Add to Steam" />
             {/if}
@@ -355,6 +445,12 @@
         <dt>Store</dt>
         <dd>{platformShort(game.platform)}</dd>
       </div>
+      {#if playedSummary}
+        <div>
+          <dt>Playtime</dt>
+          <dd>{playedSummary}</dd>
+        </div>
+      {/if}
       <div>
         <dt>Size on disk</dt>
         <dd>{formatBytes(game.sizeBytes)}</dd>
@@ -362,7 +458,10 @@
       <div class="wide">
         <dt>Executable</dt>
         <dd class="path">
-          {game.exePath ?? `Managed by ${platformShort(game.platform)}`}
+          {game.exePath ??
+            (game.isInstalled
+              ? `Managed by ${platformShort(game.platform)}`
+              : `Install through ${platformShort(game.platform)}`)}
         </dd>
       </div>
     </dl>
@@ -397,7 +496,12 @@
   {/if}
 </section>
 
-<LaunchOverlay active={launching} title={game?.title} />
+<LaunchOverlay
+  active={launching}
+  title={game?.title}
+  label={launchMode === "install" ? "Opening Steam" : "Launching"}
+  hint={launchMode === "install" ? "Approve the install in Steam" : "Handing over to the game window"}
+/>
 <Toaster />
 
 <style>
@@ -598,6 +702,13 @@
     max-width: 46ch;
   }
 
+  .played-line {
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    color: var(--fg-2);
+    font-variant-numeric: tabular-nums;
+  }
+
   .actions {
     display: flex;
     align-items: center;
@@ -707,6 +818,37 @@
   .hide-action:hover {
     color: var(--fg-0);
     transform: translateY(-1px);
+  }
+
+  .favorite-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 15px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--fg-2);
+    background: rgba(9, 13, 22, 0.3);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+    will-change: transform;
+  }
+
+  .favorite-action:hover {
+    color: var(--fg-0);
+    transform: translateY(-1px);
+  }
+
+  .favorite-action.on {
+    color: #ffd166;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 209, 102, 0.36),
+      0 0 22px rgba(255, 209, 102, 0.12);
   }
 
   .steam-note {

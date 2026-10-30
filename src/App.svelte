@@ -7,12 +7,16 @@
   import { fade } from "svelte/transition";
   import { startController } from "./lib/controller.svelte";
   import { router, navigate, back } from "./lib/router.svelte";
+  import { openSearch } from "./lib/search.svelte";
   import { applyStoredBackground, applyStoredDensity } from "./lib/theme";
   import { readStartupPage } from "./lib/windowPrefs";
   import Home from "./pages/Home.svelte";
   import GameDetail from "./pages/GameDetail.svelte";
   import Settings from "./pages/Settings.svelte";
+  import BootSplash from "./lib/components/BootSplash.svelte";
+  import Icon from "./lib/components/Icon.svelte";
   import IdleHost from "./lib/components/IdleHost.svelte";
+  import SearchOverlay from "./lib/components/SearchOverlay.svelte";
 
   const pageKey = $derived(
     router.route.name === "game" ? `game:${router.route.id}` : router.route.name,
@@ -67,6 +71,15 @@
 
       <button
         class="rail-item"
+        title="Search (Ctrl+K or /)"
+        onclick={openSearch}
+      >
+        <span class="glyph"><Icon name="search" size={18} /></span>
+        <span class="rail-label">Search</span>
+      </button>
+
+      <button
+        class="rail-item"
         class:active={router.route.name === "settings"}
         title="Settings"
         onclick={() => navigate({ name: "settings" })}
@@ -95,6 +108,8 @@
 </div>
 
 <IdleHost />
+<SearchOverlay />
+<BootSplash />
 
 <style>
   .shell {
@@ -212,6 +227,9 @@
   }
 
   .glyph {
+    display: grid;
+    place-items: center;
+    height: 19px;
     font-size: 19px;
     line-height: 1;
   }
